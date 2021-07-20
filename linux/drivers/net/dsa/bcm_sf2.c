@@ -772,7 +772,9 @@ static u32 bcm_sf2_sw_get_phy_flags(struct dsa_switch *ds, int port)
 	if (priv->int_phy_mask & BIT(port))
 		return priv->hw_params.gphy_rev;
 	else
-		return 0;
+		return PHY_BRCM_AUTO_PWRDWN_ENABLE |
+		       PHY_BRCM_DIS_TXCRXC_NOENRGY |
+		       PHY_BRCM_IDDQ_SUSPEND;
 }
 
 static void bcm_sf2_sw_adjust_link(struct dsa_switch *ds, int port,

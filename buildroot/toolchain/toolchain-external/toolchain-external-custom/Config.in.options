@@ -26,6 +26,21 @@ config BR2_TOOLCHAIN_EXTERNAL_CUSTOM_PREFIX
 	default "$(ARCH)-linux"
 
 choice
+	bool "External toolchain type"
+	help
+	  Choose gcc or llvm as the external toolchain.
+
+config BR2_TOOLCHAIN_EXTERNAL_GCC
+	bool "Use gcc"
+
+config BR2_TOOLCHAIN_EXTERNAL_LLVM
+	bool "Use llvm"
+
+endchoice
+
+if BR2_TOOLCHAIN_EXTERNAL_GCC
+
+choice
 	bool "External toolchain gcc version"
 	help
 	  Set to the gcc version that is used by your external
@@ -96,6 +111,32 @@ config BR2_TOOLCHAIN_EXTERNAL_GCC_OLD
 
 endchoice
 
+endif
+
+if BR2_TOOLCHAIN_EXTERNAL_LLVM
+
+choice
+	bool "External toolchain llvm version"
+	help
+	  Set to the llvm version that is used by your external
+	  toolchain.
+
+config BR2_TOOLCHAIN_EXTERNAL_LLVM_12
+	bool "12.x"
+	select BR2_TOOLCHAIN_LLVM_AT_LEAST_12
+
+config BR2_TOOLCHAIN_EXTERNAL_LLVM_11
+	bool "11.x"
+	select BR2_TOOLCHAIN_LLVM_AT_LEAST_11
+
+config BR2_TOOLCHAIN_EXTERNAL_LLVM_10
+	bool "10.x"
+	select BR2_TOOLCHAIN_LLVM_AT_LEAST_10
+
+endchoice
+
+endif
+
 comment "GCC older than 4.8 is not tested by Buildroot. Use at your own risk."
 	depends on !BR2_TOOLCHAIN_GCC_AT_LEAST_4_8
 
@@ -119,8 +160,20 @@ choice
 	  If your toolchain uses headers newer than the latest version
 	  in the choice, then select the latest version.
 
+config BR2_TOOLCHAIN_EXTERNAL_HEADERS_5_12
+	bool "5.12.x or later"
+	select BR2_TOOLCHAIN_HEADERS_AT_LEAST_5_12
+
+config BR2_TOOLCHAIN_EXTERNAL_HEADERS_5_11
+	bool "5.11"
+	select BR2_TOOLCHAIN_HEADERS_AT_LEAST_5_11
+
+config BR2_TOOLCHAIN_EXTERNAL_HEADERS_5_10
+	bool "5.10.x"
+	select BR2_TOOLCHAIN_HEADERS_AT_LEAST_5_10
+
 config BR2_TOOLCHAIN_EXTERNAL_HEADERS_5_9
-	bool "5.9.x or later"
+	bool "5.9.x"
 	select BR2_TOOLCHAIN_HEADERS_AT_LEAST_5_9
 
 config BR2_TOOLCHAIN_EXTERNAL_HEADERS_5_8

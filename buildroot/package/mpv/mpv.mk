@@ -4,13 +4,14 @@
 #
 ################################################################################
 
-MPV_VERSION = 0.32.0
+MPV_VERSION = 0.33.1
 MPV_SITE = $(call github,mpv-player,mpv,v$(MPV_VERSION))
 MPV_DEPENDENCIES = \
-	host-pkgconf ffmpeg zlib \
+	host-pkgconf ffmpeg libass zlib \
 	$(if $(BR2_PACKAGE_LIBICONV),libiconv)
 MPV_LICENSE = GPL-2.0+
 MPV_LICENSE_FILES = LICENSE.GPL
+MPV_CPE_ID_VENDOR = mpv
 
 MPV_NEEDS_EXTERNAL_WAF = YES
 
@@ -23,10 +24,15 @@ MPV_CONF_OPTS = \
 	--disable-coreaudio \
 	--disable-cuda-hwaccel \
 	--disable-opensles \
-	--disable-rsound \
 	--disable-rubberband \
 	--disable-uchardet \
 	--disable-vapoursynth
+
+ifeq ($(BR2_STATIC_LIBS),y)
+MPV_CONF_OPTS += --disable-libmpv-shared --enable-libmpv-static
+else
+MPV_CONF_OPTS += --enable-libmpv-shared --disable-libmpv-static
+endif
 
 # ALSA support requires pcm+mixer
 ifeq ($(BR2_PACKAGE_ALSA_LIB_MIXER)$(BR2_PACKAGE_ALSA_LIB_PCM),yy)
@@ -75,14 +81,6 @@ MPV_CONF_OPTS += --enable-libarchive
 MPV_DEPENDENCIES += libarchive
 else
 MPV_CONF_OPTS += --disable-libarchive
-endif
-
-# libass subtitle support
-ifeq ($(BR2_PACKAGE_LIBASS),y)
-MPV_CONF_OPTS += --enable-libass
-MPV_DEPENDENCIES += libass
-else
-MPV_CONF_OPTS += --disable-libass
 endif
 
 # bluray support
@@ -148,14 +146,6 @@ MPV_CONF_OPTS += --enable-pulse
 MPV_DEPENDENCIES += pulseaudio
 else
 MPV_CONF_OPTS += --disable-pulse
-endif
-
-# samba support
-ifeq ($(BR2_PACKAGE_SAMBA4),y)
-MPV_CONF_OPTS += --enable-libsmbclient
-MPV_DEPENDENCIES += samba4
-else
-MPV_CONF_OPTS += --disable-libsmbclient
 endif
 
 # SDL support

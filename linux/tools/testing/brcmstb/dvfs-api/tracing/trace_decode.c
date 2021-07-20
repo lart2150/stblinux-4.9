@@ -46,6 +46,37 @@
 
 #define STR_ARRAY_SIZE(__strs) (sizeof(__strs)/sizeof(__strs[0]))
 
+/* These are standard SCMI constants */
+
+/*
+ * Keep these defines and this array of strings in sync with the array
+ * 'pmap_cores' in drivers/soc/bcm/brcmstb/nexus/dvfs.c
+ */
+static const char * const linux_cores[] = {
+	"cpu_core",
+	"v3d",
+	"sysif",
+	"scb",
+	"hvd0",
+	"raaga0",
+	"vice0",
+	"vice0_pss",
+	"vice1",
+	"vice1_pss",
+	"xpt",
+	"m2mc0",
+	"m2mc1",
+	"mipmap0",
+	"tsx0",
+	"smartcard0",
+	"smartcard1",
+	"vpu0",
+	"bne0",
+	"asp0",
+	"hvd_cabac0",
+	"axi0",
+};
+
 static const char *proto_to_str(int proto)
 {
 	static const char *strs[] = { "Base", "Power", "System", "Perf",
@@ -166,10 +197,23 @@ void prn_event_decoded(struct trace_header *th, struct event *evp,
 		printf("%s %s ", proto_to_str(evp->params[0]),
 		       msg_id_to_str(evp->params[0], evp->params[1]));
 		if (evp->params[0] == SCMI_PROTOCOL_CLOCK &&
-		    evp->params[1] == 7) {
+		    evp->params[1] == CLOCK_CONFIG_SET) {
 			printf("clk_%sable(%s)",
 			       (evp->params[3] & 0x1) ? "en" : "dis",
 			       trace_decode_clk_name(evp->params[2]));
+		} else if (evp->params[0] == SCMI_PROTOCOL_PERF
+			   && (evp->params[1] == PERF_LEVEL_SET
+			       || evp->params[1] == PERF_LEVEL_GET)) {
+			const int core_id = evp->params[2];
+			const int pstate = evp->params[3];
+			const char *name = (core_id >= STR_ARRAY_SIZE(linux_cores))
+				? "unknown" : linux_cores[core_id];
+
+			if (evp->params[1] == PERF_LEVEL_SET)
+				printf("set_pstate(%s, %d)\n", name, pstate);
+			else
+				printf("get_pstate(%s)\n", name);
+
 		} else {
 			printf("[ ");
 			for (i = 2; i < evp->num_params; i++)

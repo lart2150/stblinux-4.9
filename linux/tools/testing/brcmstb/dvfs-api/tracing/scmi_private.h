@@ -40,4 +40,10 @@
 #define PERF_DOM_ATTR_SET_PERF		(1 << 30)
 #define PERF_DOM_ATTR_LIMIT_NOTIFY	(1 << 29)
 #define PERF_DOM_ATTR_CHANGE_NOTIFY	(1 << 28)
+
+/* Indivdual command constants */
+#define CLOCK_CONFIG_SET		7 /* Clock Proto Cmd */
+#define PERF_LEVEL_SET			7 /* Perf Proto Cmd */
+#define PERF_LEVEL_GET			8 /* Perf Proto Cmd */
+
 #endif	/* __CSS_SCMI_PRIVATE_H__ */

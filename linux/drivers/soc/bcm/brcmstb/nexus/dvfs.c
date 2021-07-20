@@ -76,6 +76,7 @@ static const char __maybe_unused *pmap_cores[BCLK_SW_NUM_CORES] = {
 	[BCLK_SW_ASP0 - BCLK_SW_OFFSET] = "asp0",
 	[BCLK_SW_HVD_CABAC0 - BCLK_SW_OFFSET] = "hvd_cabac0",
 	[BCLK_SW_AXI0 - BCLK_SW_OFFSET] = "axi0",
+	[BCLK_SW_BSTM0 - BCLK_SW_OFFSET] = "bstm0",
 };
 
 static const struct scmi_handle *handle;

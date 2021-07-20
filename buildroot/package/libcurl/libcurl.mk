@@ -4,7 +4,7 @@
 #
 ################################################################################
 
-LIBCURL_VERSION = 7.73.0
+LIBCURL_VERSION = 7.77.0
 LIBCURL_SOURCE = curl-$(LIBCURL_VERSION).tar.xz
 LIBCURL_SITE = https://curl.haxx.se/download
 LIBCURL_DEPENDENCIES = host-pkgconf \
@@ -12,6 +12,8 @@ LIBCURL_DEPENDENCIES = host-pkgconf \
 	$(if $(BR2_PACKAGE_RTMPDUMP),rtmpdump)
 LIBCURL_LICENSE = curl
 LIBCURL_LICENSE_FILES = COPYING
+LIBCURL_CPE_ID_VENDOR = haxx
+LIBCURL_CPE_ID_PRODUCT = libcurl
 LIBCURL_INSTALL_STAGING = YES
 
 # We disable NTLM support because it uses fork(), which doesn't work
@@ -22,7 +24,7 @@ LIBCURL_INSTALL_STAGING = YES
 # generate C code) isn't very useful
 LIBCURL_CONF_OPTS = --disable-manual --disable-ntlm-wb \
 	--enable-hidden-symbols --with-random=/dev/urandom --disable-curldebug \
-	--disable-libcurl-option
+	--disable-libcurl-option --disable-ldap --disable-ldaps
 
 ifeq ($(BR2_TOOLCHAIN_HAS_THREADS),y)
 LIBCURL_CONF_OPTS += --enable-threaded-resolver
@@ -124,6 +126,13 @@ else
 LIBCURL_CONF_OPTS += --without-nghttp2
 endif
 
+ifeq ($(BR2_PACKAGE_LIBGSASL),y)
+LIBCURL_DEPENDENCIES += libgsasl
+LIBCURL_CONF_OPTS += --with-gsasl
+else
+LIBCURL_CONF_OPTS += --without-gsasl
+endif
+
 ifeq ($(BR2_PACKAGE_LIBCURL_COOKIES_SUPPORT),y)
 LIBCURL_CONF_OPTS += --enable-cookies
 else
@@ -141,8 +150,6 @@ LIBCURL_CONF_OPTS += \
 	--enable-dict \
 	--enable-gopher \
 	--enable-imap \
-	--enable-ldap \
-	--enable-ldaps \
 	--enable-pop3 \
 	--enable-rtsp \
 	--enable-smb \
@@ -154,8 +161,6 @@ LIBCURL_CONF_OPTS += \
 	--disable-dict \
 	--disable-gopher \
 	--disable-imap \
-	--disable-ldap \
-	--disable-ldaps \
 	--disable-pop3 \
 	--disable-rtsp \
 	--disable-smb \

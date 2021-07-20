@@ -564,6 +564,9 @@ static inline void mem_cgroup_count_vm_event(struct mm_struct *mm,
 	case PGMAJFAULT:
 		this_cpu_inc(memcg->stat->events[MEM_CGROUP_EVENTS_PGMAJFAULT]);
 		break;
+	case OOM_KILL:
+		cgroup_file_notify(&memcg->events_file);
+		break;
 	default:
 		BUG();
 	}

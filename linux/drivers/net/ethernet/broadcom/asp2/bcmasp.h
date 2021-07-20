@@ -361,6 +361,8 @@ struct bcmasp_intf {
 	int			wol_irq;
 	unsigned int		wol_irq_disabled:1;
 	unsigned int		wol_keep_rx_en:1;
+
+	struct ethtool_eee	eee;
 };
 
 #define __BCMASP_IO_MACRO(name, m)					\
@@ -555,5 +557,7 @@ void bcmasp_netfilt_get_all_active(struct bcmasp_intf *intf, u32 *rule_locs,
 int bcmasp_netfilt_get_max(struct bcmasp_intf *intf);
 
 void bcmasp_netfilt_suspend(struct bcmasp_intf *intf);
+
+void bcmasp_eee_enable_set(struct bcmasp_intf *intf, bool enable);
 
 #endif

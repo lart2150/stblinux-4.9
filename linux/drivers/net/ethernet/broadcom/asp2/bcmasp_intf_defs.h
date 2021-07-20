@@ -33,6 +33,16 @@
 #define  UMC_MAC0			0x0c
 #define  UMC_MAC1			0x10
 #define  UMC_FRM_LEN			0x14
+#define  UMC_EEE_CTRL			0x64
+#define   EN_LPI_RX_PAUSE		(1 << 0)
+#define   EN_LPI_TX_PFC			(1 << 1)
+#define   EN_LPI_TX_PAUSE		(1 << 2)
+#define   EEE_EN			(1 << 3)
+#define   RX_FIFO_CHECK			(1 << 4)
+#define   EEE_TX_CLK_DIS		(1 << 5)
+#define   DIS_EEE_10M			(1 << 6)
+#define   LP_IDLE_PREDICTION_MODE	(1 << 7)
+#define  UMC_EEE_LPI_TIMER		0x68
 #define  UMC_PAUSE_CNTRL		0x330
 #define  UMC_TX_FLUSH			0x334
 #define  UMC_MIB_START			0x400

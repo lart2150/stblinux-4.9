@@ -39,10 +39,14 @@ use constant BR_MIRROR_PATH => qw(/mirror/buildroot);
 use constant FORBIDDEN_PATHS => ( qw(. /tools/bin) );
 # Trailing space after the user agent tells Perl to append "libwww-perl/x.y.z".
 use constant HTTP_USER_AGENT => q(BRCMSTB/br_config.pl );
+use constant LLVM_MIN_KERNEL => qw(5.4);
+use constant LLVM_WRAPPER => qw(llvm-wrapper.pl);
 use constant MERGED_FRAGMENT => qw(merged_fragment);
 use constant PRIVATE_CCACHE => qw($(HOME)/.buildroot-ccache);
-use constant SHARED_CCACHE => qw(/local/users/stbdev/buildroot-ccache);
 use constant SHARED_OSS_DIR => qw(/projects/stbdev/open-source);
+use constant SHARED_CCACHE =>  SHARED_OSS_DIR . qw(/buildroot-ccache);
+use constant STB_AMS_TRACING =>
+	qw(tools/testing/brcmstb/dvfs-api/tracing/Makefile);
 use constant STB_CMA_DRIVER => qw(include/linux/brcmstb/cma_driver.h);
 use constant TOOLCHAIN_DIR => qw(/opt/toolchains);
 use constant TOOLCHAIN_FILE_CLASSIC => qw(misc/toolchain);
@@ -55,6 +59,13 @@ use constant SHA_LEN => 12;
 use constant SLEEP_TIME => 5;
 use constant STALE_THRESHOLD => 7 * 24 * 60 * 60; 	# days in seconds
 use constant WORLD_PERMS => (S_IRWXG | S_IRWXO);
+
+use constant LLVM_DISABLE_PKGS => qw(
+	BR2_PACKAGE_ELFUTILS
+	BR2_LINUX_KERNEL_TOOL_PERF
+	BR2_PACKAGE_LINUX_TOOLS_PERF
+	BR2_PACKAGE_PERF
+);
 
 my %compiler_map = (
 	'arm64' => 'aarch64-linux-gcc',
@@ -275,6 +286,26 @@ sub check_oss_stale_sources($$)
 	}
 }
 
+sub kernel_at_least($$)
+{
+	my ($ver, $min_ver) = @_;
+	my ($maj, $min);
+	my ($min_maj, $min_min);
+
+	if ($ver =~ /(\d+)\.(\d+)/) {
+		($maj, $min) = ($1, $2);
+	} else {
+		return 0;
+	}
+	if ($min_ver =~ /(\d+)\.(\d+)/) {
+		($min_maj, $min_min) = ($1, $2);
+	} else {
+		return 0;
+	}
+
+	return (($maj > $min_maj) || ($maj == $min_maj && $min >= $min_min));
+}
+
 sub find_stb_toolchain_match($$)
 {
 	my ($tc_data, $ver) = @_;
@@ -436,11 +467,49 @@ sub check_linux($)
 	return 1;
 }
 
-sub check_cma_driver($)
+# The remote repo must have been configured with
+#    git config daemon.uploadarch true
+# in order for "git archive" to work for remote repos.
+sub check_feature_remote($$$)
+{
+	my ($remote, $branch, $feature) = @_;
+	my $ret;
+
+	# "git archive" will download the contents of the specified path from
+	# the remote. So, we make sure to specify a file rather than an entire
+	# directory and a small file a that.
+	$ret = system("git archive --format=tar --remote=$remote $branch ".
+		"$feature >/dev/null 2>&1");
+
+	return ($ret == 0);
+}
+
+sub check_cma_driver_local($)
 {
 	my ($local_linux) = @_;
 
 	return (-r "$local_linux/".STB_CMA_DRIVER);
+}
+
+sub check_cma_driver_remote($$)
+{
+	my ($remote, $branch) = @_;
+
+	return check_feature_remote($remote, $branch, STB_CMA_DRIVER);
+}
+
+sub check_ams_tracing_local($)
+{
+	my ($local_linux) = @_;
+
+	return (-r "$local_linux/".STB_AMS_TRACING);
+}
+
+sub check_ams_tracing_remote($$)
+{
+	my ($remote, $branch) = @_;
+
+	return check_feature_remote($remote, $branch, STB_AMS_TRACING);
 }
 
 sub get_cores()
@@ -465,12 +534,32 @@ sub get_cores()
 	return $num_cores;
 }
 
+# Find the corresponding GCC toolchain if we are using LLVM. Otherwise just
+# return the toolchain directory that was passed in.
+sub get_gcc_dir($)
+{
+	my ($toolchain) = @_;
+	my $llvm_wrapper = "$toolchain/bin/".LLVM_WRAPPER;
+
+	if (-x $llvm_wrapper) {
+		chomp($toolchain = `$llvm_wrapper --get-gcc`);
+	}
+
+	return $toolchain;
+}
+
 sub get_stbrelease($)
 {
 	my ($linux_dir) = @_;
 	my ($version, $patch_level, $extra_version);
 
 	if (!defined($linux_dir)) {
+		my $ver =
+			$generic_config{'BR2_LINUX_KERNEL_CUSTOM_REPO_VERSION'};
+		if ($ver =~ /^[A-Za-z_-]*(\d+)\.(\d+)/) {
+			return ($1, $2);
+		}
+
 		return undef;
 	}
 	if (!open(F, "$linux_dir/Makefile")) {
@@ -579,28 +668,66 @@ sub find_toolchain($)
 	return undef;
 }
 
-sub set_target_toolchain($$)
+sub set_target_toolchain($$$)
 {
-	my ($toolchain, $arch) = @_;
-	my $stbgcc = $toolchain."/bin/".$compiler_map{$arch};
-	my $version = `$stbgcc -v 2>&1 | grep 'gcc version'`;
+	my ($toolchain, $arch, $local_linux) = @_;
+	my $stbcc = "$toolchain/bin/".$compiler_map{$arch};
+	my $gcc_version = `$stbcc -v 2>&1 | grep 'gcc version'`;
+	my $llvm_version = `$stbcc -v 2>&1 | grep 'clang version'`;
+	my $gcc_dir = get_gcc_dir($toolchain);
 	my $libc = get_libc($toolchain, $arch) || '';
 	my $libc_sel = 'BR2_TOOLCHAIN_EXTERNAL_CUSTOM_'.uc($libc);
+	my @stb_rel = get_stbrelease($local_linux);
+	my $kernel_version;
 
-	if (!-e $stbgcc) {
+	if (! -e $stbcc) {
 		return -1;
 	}
 	if ($libc eq '') {
 		return -2;
 	}
 
-	if ($version =~ /\s+(\d+)\.(\d+)\.(\d+)/) {
+	if (defined($stb_rel[0])) {
+		$kernel_version = $stb_rel[0].".".$stb_rel[1];
+	}
+
+	if ($gcc_version =~ /\s+(\d+)\.(\d+)\.(\d+)/) {
 		my ($major, $minor, $patch) = ($1, $2, $3);
 		my $config_str = "BR2_TOOLCHAIN_EXTERNAL_GCC_$major";
 
 		print("Detected GCC $major ($major.$minor)...\n");
 		print("C library is $libc...\n");
 		$toolchain_config{$arch}{$config_str} = 'y';
+	} elsif ($llvm_version =~ /\s+(\d+)\.(\d+)\.(\d+)/) {
+		my $stbgcc;
+		my ($gcc_major, $gcc_minor, $gcc_patch);
+		my ($major, $minor, $patch) = ($1, $2, $3);
+		my $llvm_ver_str = "BR2_TOOLCHAIN_EXTERNAL_LLVM_$major";
+
+		$stbgcc = "$gcc_dir/bin/".$compiler_map{$arch};
+		$gcc_version = `$stbgcc -v 2>&1 | grep 'gcc version'`;
+		if ($gcc_version =~ /\s+(\d+)\.(\d+)\.(\d+)/) {
+			($gcc_major, $gcc_minor, $gcc_patch) = ($1, $2, $3);
+		} else {
+			return -3;
+		}
+
+		print("Detected LLVM $major.$minor...\n");
+		print("Detected GCC $gcc_major.$gcc_minor...\n");
+		print("C library is $libc...\n");
+		if (!kernel_at_least($kernel_version, LLVM_MIN_KERNEL)) {
+			print("WARNING! LLVM is only supported as of kernel ".
+				LLVM_MIN_KERNEL.". You have $kernel_version. ".
+				"Build may fail.\n");
+		}
+		$toolchain_config{$arch}{'BR2_TOOLCHAIN_EXTERNAL_LLVM'} = 'y';
+		$toolchain_config{$arch}{$llvm_ver_str} = 'y';
+
+		# Temporarily disable a few packages
+		for my $pkg (LLVM_DISABLE_PKGS) {
+			print("Disabling $pkg due to LLVM...\n");
+			$generic_config{$pkg} = '';
+		}
 	} else {
 		print("WARNING! Couldn't determine GCC version number. ".
 			"Build may fail.\n");
@@ -731,19 +858,30 @@ sub get_kconfig_var($$)
 	return $val;
 }
 
-sub get_kernel_header_version($$)
+sub get_sysroot($$)
 {
 	my ($toolchain, $arch) = @_;
-	my ($compiler_arch, $sys_root, $version_path);
-	my $version_code;
+	my ($compiler_arch, $sys_root);
 
+	$toolchain = get_gcc_dir($toolchain);
 	$compiler_arch = $arch_config{$arch}->{'arch_name'};
 	# The MIPS compiler may be called "mipsel-*" not just "mips-*".
 	if (defined($arch_config{$arch}->{'BR2_mipsel'})) {
 		$compiler_arch .= "el";
 	}
+	# "sysroot" and "sys-root" are being used as possible directory names
 	$sys_root = `ls -d "$toolchain/$compiler_arch"*/sys*root 2>/dev/null`;
 	chomp($sys_root);
+
+	return $sys_root;
+}
+
+sub get_kernel_header_version($$)
+{
+	my ($toolchain, $arch) = @_;
+	my ($sys_root, $version_code, $version_path);
+
+	$sys_root = get_sysroot($toolchain, $arch);
 	if ($sys_root eq '') {
 		return undef;
 	}
@@ -1067,9 +1205,7 @@ sub get_32bit_runtime($$$)
 		my $arch32 = $arch;
 
 		$arch32 =~ s|64||;
-		# "sysroot" and "sys-root" are being used as directory names
-		$rt_path = `ls -d "$runtime_base/$arch32"*/sys*root 2>/dev/null`;
-		chomp($rt_path);
+		$rt_path = get_sysroot($runtime_base, $arch32);
 	}
 
 	if ($rt_path eq '') {
@@ -1101,6 +1237,63 @@ sub get_32bit_runtime($$$)
 		}
 		print("Root file system will use /lib and /lib32...\n");
 	}
+}
+
+sub get_br_ccache($)
+{
+	my ($opts_X) = @_;
+	my $br_ccache;
+
+	if (defined($ENV{'BR_CCACHE'})) {
+		$br_ccache = $ENV{'BR_CCACHE'};
+	}
+	if (defined($opts_X)) {
+		$br_ccache = $opts_X;
+	}
+	if (defined($br_ccache)) {
+		if ($br_ccache eq '-') {
+			$generic_config{'BR2_CCACHE'} = '';
+		} else {
+			$generic_config{'BR2_CCACHE_DIR'} = $br_ccache;
+		}
+	} else {
+		$br_ccache = get_ccache_dir(SHARED_CCACHE);
+		$generic_config{'BR2_CCACHE_DIR'} = $br_ccache;
+		if ($br_ccache eq SHARED_CCACHE) {
+			$generic_config{'BR2_CCACHE_INITIAL_SETUP'} =
+				"-M 10G -o 'umask=0'";
+		}
+	}
+
+	return $br_ccache;
+}
+
+sub get_br_mirror($)
+{
+	my ($opts_M) = @_;
+	my $br_mirror;
+
+	# Set custom Buildroot mirror
+	if (defined($ENV{'BR_MIRROR'})) {
+		$br_mirror = $ENV{'BR_MIRROR'};
+	}
+
+	# Command line option -M supersedes environment to specify mirror
+	if (defined($opts_M)) {
+		# Option "-M -" disables using a mirror. This overrides the
+		# environment variable BR_MIRROR and the built-in default.
+		$br_mirror = $opts_M;
+	}
+
+	if (!defined($br_mirror)) {
+		$br_mirror = get_br_mirror_host();
+	}
+
+	if (defined($br_mirror) && $br_mirror ne '-') {
+		$generic_config{'BR2_PRIMARY_SITE'} = $br_mirror;
+	}
+
+	return $br_mirror;
 }
 
 sub run_clean_mode($$)
@@ -1216,6 +1409,10 @@ sub print_usage($)
 		"          -t <path>....use <path> as toolchain directory\n".
 		"          -v <tag>.....use <tag> as Linux version tag\n".
 		"          -X <path>....use <path> as CCACHE ('-' for none)\n");
+	print(STDERR "\nEnvironment Variables:\n".
+		"          BR_CCACHE............CCACHE directory (like -X)\n".
+		"          BR_LINUX_OVERRIDE....Linux directory (like -L)\n".
+		"          BR_MIRROR............BR mirror (like -M)\n");
 }
 
 ########################################
@@ -1232,6 +1429,8 @@ my $hash_mode = 0;
 my $tc_info_mode = 0;
 my $ret = 0;
 my $is_64bit = 0;
+my $disable_ams_tracing = 0;
+my $disable_cma_driver = 0;
 my $relative_outputdir;
 my $br_outputdir;
 my $br_mirror;
@@ -1303,6 +1502,12 @@ if (defined($ENV{'BR_LINUX_OVERRIDE'})) {
 	$local_linux = $ENV{'BR_LINUX_OVERRIDE'};
 }
 
+if (defined($opts{'l'}) && $opts{'l'} !~ m%^(git|ssh|https?)://%) {
+	print(STDERR "$prg: option -l requires a URL for GIT. ".
+		"Did you mean -L?\n");
+	exit(1);
+}
+
 # Command line option -L supersedes environment to specify local Linux directory
 if (defined($opts{'L'})) {
 	# Option "-L -" clears the local Linux directory. This can be used to
@@ -1361,28 +1566,11 @@ if (defined($opts{'o'})) {
 # Our temporary defconfig goes in the output directory.
 $temp_config = "$br_outputdir/$temp_config";
 
-if (defined($ENV{'BR_CCACHE'})) {
-	$br_ccache = $ENV{'BR_CCACHE'};
-}
-if (defined($opts{'X'})) {
-	$br_ccache = $opts{'X'};
-}
+$br_ccache = get_br_ccache($opts{'X'});
 if (defined($br_ccache)) {
-	if ($br_ccache eq '-') {
-		print("Not using CCACHE to build...\n");
-		$generic_config{'BR2_CCACHE'} = '';
-	} else {
-		print("Using custom CCACHE cache $br_ccache...\n");
-		$generic_config{'BR2_CCACHE_DIR'} = $br_ccache;
-	}
+	print("Using custom CCACHE $br_ccache...\n");
 } else {
-	$br_ccache = get_ccache_dir(SHARED_CCACHE);
-	print("Using CCACHE with cache $br_ccache...\n");
-	$generic_config{'BR2_CCACHE_DIR'} = $br_ccache;
-	if ($br_ccache eq SHARED_CCACHE) {
-		$generic_config{'BR2_CCACHE_INITIAL_SETUP'} =
-			"-M 10G -o 'umask=0'";
-	}
+	print("Not using CCACHE to build...\n");
 }
 
 $kernel_frag_files = $opts{'F'} || '';
@@ -1512,9 +1700,11 @@ if (defined($local_linux)) {
 			"with the build.\n");
 		exit(1);
 	}
-	if (!check_cma_driver($local_linux)) {
-		print("Disabling CMATOOL since kernel doesn't support it...\n");
-		$generic_config{'BR2_PACKAGE_CMATOOL'} = '';
+	if (!check_cma_driver_local($local_linux)) {
+		$disable_cma_driver = 1;
+	}
+	if (!check_ams_tracing_local($local_linux)) {
+		$disable_ams_tracing = 1;
 	}
 
 	write_brcmstbmk($prg, $relative_outputdir, $local_linux);
@@ -1531,6 +1721,9 @@ if (defined($local_linux)) {
 		}
 	}
 } else {
+	my $linux_git_url = get_linux_remote();
+	my $linux_branch =
+		$generic_config{'BR2_LINUX_KERNEL_CUSTOM_REPO_VERSION'};
 	my $linux_remote_resolves = resolve_linux_remote();
 
 	# Delete our custom makefile, so we don't override the Linux directory.
@@ -1550,6 +1743,22 @@ if (defined($local_linux)) {
 		$kernel_frag_files = get_linux_sha_remote($kernel_frag_files,
 			$relative_outputdir);
 	}
+
+	if (!check_cma_driver_remote($linux_git_url, $linux_branch)) {
+		$disable_cma_driver = 1;
+	}
+	if (!check_ams_tracing_remote($linux_git_url, $linux_branch)) {
+		$disable_ams_tracing = 1;
+	}
+}
+
+if ($disable_cma_driver) {
+	print("Disabling CMATOOL since kernel doesn't support it...\n");
+	$generic_config{'BR2_PACKAGE_CMATOOL'} = '';
+}
+if ($disable_ams_tracing) {
+	print("Disabling BRCM_AMS_TRACING; kernel doesn't support it...\n");
+	$generic_config{'BR2_PACKAGE_BRCM_AMS_TRACING'} = '';
 }
 
 $inline_kernel_frag_file = $relative_outputdir."/".KERNEL_FRAG_FILE;
@@ -1589,7 +1798,9 @@ if (defined($opts{'t'})) {
 	$toolchain =~ s|/+$||;
 }
 
-$recommended_toolchain = check_toolchain($toolchain, $local_linux);
+# Only check the GCC portion of the toolchain at this time. We may want an LLVM
+# check later on.
+$recommended_toolchain = check_toolchain(get_gcc_dir($toolchain), $local_linux);
 if ($recommended_toolchain ne '') {
 	my $t = $toolchain;
 
@@ -1599,7 +1810,7 @@ if ($recommended_toolchain ne '') {
 	print(STDERR "Hit Ctrl-C now or wait ".SLEEP_TIME." seconds...\n");
 	sleep(SLEEP_TIME);
 }
-$ret = set_target_toolchain($toolchain, $arch);
+$ret = set_target_toolchain($toolchain, $arch, $local_linux);
 if ($ret == 0) {
 	print("Using $toolchain as toolchain...\n");
 } else {
@@ -1629,25 +1840,9 @@ if (defined($kernel_header_version)) {
 		"fail\n");
 }
 
-# Set custom Buildroot mirror
-if (defined($ENV{'BR_MIRROR'})) {
-	$br_mirror = $ENV{'BR_MIRROR'};
-}
-
-# Command line option -M supersedes environment to specify mirror
-if (defined($opts{'M'})) {
-	# Option "-M -" disables using a mirror. This overrides the environment
-	# variable BR_MIRROR and the built-in default.
-	$br_mirror = $opts{'M'};
-}
-
-if (!defined($br_mirror)) {
-	$br_mirror = get_br_mirror_host();
-}
-if (defined($br_mirror) && $br_mirror ne '-') {
+$br_mirror = get_br_mirror($opts{'M'});
+if (defined($br_mirror)) {
 	print("Using $br_mirror as Buildroot mirror...\n");
-	$generic_config{'BR2_PRIMARY_SITE'} = $br_mirror;
-
 } else {
 	print("Not using a Buildroot mirror...\n");
 }
@@ -1703,8 +1898,8 @@ if (defined($opts{'i'})) {
 	$ret = system("make O=\"$br_outputdir\"");
 	$ret >>= 8;
 } else {
-	print("To build it, run the following commands:\n".
-	"\tcd $br_outputdir; make\n");
+	print("To build it, run the following command:\n".
+	"\tmake -C $relative_outputdir\n");
 }
 
 print(STDERR "$prg: exiting with code $ret\n") if ($ret > 0);

@@ -1173,11 +1173,6 @@ static int brcm_pcie_setup_bridge(struct brcm_pcie *pcie)
 	WR_FLD_RB(base, PCIE_RC_CFG_VENDOR_VENDOR_SPECIFIC_REG1,
 		  ENDIAN_MODE_BAR2, DATA_ENDIAN);
 
-	/* Refclk from RC should be gated with CLKREQ# input when ASPM L0s,L1
-	 * is enabled =>  setting the CLKREQ_DEBUG_ENABLE field to 1.
-	 */
-	WR_FLD_RB(base, PCIE_MISC_HARD_PCIE_HARD_DEBUG, CLKREQ_DEBUG_ENABLE, 1);
-
 	pcie->bridge_setup_done = true;
 
 	return 0;
@@ -1262,6 +1257,34 @@ static void turn_off(struct brcm_pcie *pcie)
 	brcm_pcie_bridge_sw_init_set(pcie, 1);
 }
 
+void config_clkreq(struct brcm_pcie *pcie)
+{
+	void __iomem *base = pcie->base;
+	int domain = pci_domain_nr(pcie->bus);
+	const struct pci_bus *bus = pci_find_bus(domain, 1);
+	struct pci_dev *pdev;
+	u32 link_cap = 0;
+	u16 link_ctl = 0;
+
+	pdev = bus ? (struct pci_dev *)bus->devices.next : NULL;
+	if (!pdev)
+		return;
+
+	pcie_capability_read_dword(pdev, PCI_EXP_LNKCAP, &link_cap);
+	if (!(link_cap & PCI_EXP_LNKCAP_CLKPM))
+		return;
+
+	pcie_capability_read_word(pdev, PCI_EXP_LNKCTL, &link_ctl);
+	if (!(link_ctl & PCI_EXP_LNKCTL_CLKREQ_EN))
+		return;
+	/*
+	 * Refclk from RC should be gated with CLKREQ# input when ASPM L0s,L1
+	 * is enabled => setting the CLKREQ_DEBUG_ENABLE field to 1.
+	 */
+	WR_FLD_RB(base, PCIE_MISC_HARD_PCIE_HARD_DEBUG, CLKREQ_DEBUG_ENABLE, 1);
+	dev_info(pcie->dev, "clkreq control enabled\n");
+}
+
 static int brcm_pcie_suspend(struct device *dev)
 {
 	struct brcm_pcie *pcie = dev_get_drvdata(dev);
@@ -1317,6 +1340,7 @@ static int brcm_pcie_resume(struct device *dev)
 	if (pcie->msi && pcie->msi_internal)
 		brcm_msi_set_regs(pcie->msi);
 
+	config_clkreq(pcie);
 	pcie->suspended = false;
 
 	return 0;
@@ -1765,6 +1789,7 @@ static int brcm_pcie_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, pcie);
 	if (pcie->has_err_report)
 		brcm_register_die_notifiers(pcie);
+	config_clkreq(pcie);
 
 	return 0;
 

@@ -293,6 +293,7 @@ static void usage(char *progname)
 
 static int debugfs_get_val(char *fname, size_t width, uint64_t *val)
 {
+	int ret;
 	FILE *f = fopen(fname, "r");
 
 	if (f == NULL) {
@@ -301,13 +302,15 @@ static int debugfs_get_val(char *fname, size_t width, uint64_t *val)
 	}
 
 	if (width == 4)
-		fscanf(f, "%u", (unsigned int *) val);
+		ret = fscanf(f, "%u", (unsigned int *) val);
 	else if (width == 8)
-		fscanf(f, "%llx", (unsigned long long *) val);
+		ret = fscanf(f, "%llx", (unsigned long long *) val);
+	else
+		ret = -1;
 
 	fclose(f);
 
-	return 0;
+	return (ret == 1) ? 0 : -1;
 }
 
 int parse_options(int argc, char **argv, struct options *opts)
@@ -414,7 +417,7 @@ static int dump_to_file(char *of_name, char *buf, int length)
 	int outfd;
 	int ret = 0;
 
-	outfd = open(of_name, O_WRONLY | O_CREAT);
+	outfd = open(of_name, O_WRONLY | O_CREAT, 0666);
 	if (outfd < 0) {
 		perror("file open failed");
 		return errno;

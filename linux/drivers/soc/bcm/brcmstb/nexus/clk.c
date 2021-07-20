@@ -32,7 +32,7 @@ static const char * const clk_names_stb[] = {
 
 	/* [10..1f] */
 	"sw_smartcard1", "reserved", "sw_bne", "sw_asp",
-	"sw_hvd_cabac0", "sw_axi0", "reserved", "reserved",
+	"sw_hvd_cabac0", "sw_axi0", "sw_bstm", "reserved",
 	"reserved", "reserved", "reserved", "reserved",
 	"reserved", "reserved", "reserved", "reserved",
 

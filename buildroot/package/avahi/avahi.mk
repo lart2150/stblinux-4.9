@@ -8,7 +8,12 @@ AVAHI_VERSION = 0.8
 AVAHI_SITE = https://github.com/lathiat/avahi/releases/download/v$(AVAHI_VERSION)
 AVAHI_LICENSE = LGPL-2.1+
 AVAHI_LICENSE_FILES = LICENSE
+AVAHI_CPE_ID_VENDOR = avahi
 AVAHI_INSTALL_STAGING = YES
+
+# CVE-2021-26720 is an issue in avahi-daemon-check-dns.sh, which is
+# part of the Debian packaging and not part of upstream avahi
+AVAHI_IGNORE_CVES += CVE-2021-26720
 
 AVAHI_CONF_ENV = \
 	avahi_cv_sys_cxx_works=yes \

@@ -4,10 +4,11 @@
 #
 ################################################################################
 
-SYSTEMD_VERSION = 246.5
+SYSTEMD_VERSION = 247.3
 SYSTEMD_SITE = $(call github,systemd,systemd-stable,v$(SYSTEMD_VERSION))
 SYSTEMD_LICENSE = LGPL-2.1+, GPL-2.0+ (udev), Public Domain (few source files, see README), BSD-3-Clause (tools/chromiumos)
 SYSTEMD_LICENSE_FILES = LICENSE.GPL2 LICENSE.LGPL2.1 README tools/chromiumos/LICENSE
+SYSTEMD_CPE_ID_VENDOR = freedesktop
 SYSTEMD_INSTALL_STAGING = YES
 SYSTEMD_DEPENDENCIES = \
 	$(BR2_COREUTILS_HOST_DEPENDENCY) \
@@ -32,11 +33,13 @@ SYSTEMD_CONF_OPTS += \
 	-Ddefault-hierarchy=hybrid \
 	-Didn=true \
 	-Dima=false \
+	-Dkexec-path=/usr/sbin/kexec \
+	-Dkmod-path=/usr/bin/kmod \
 	-Dldconfig=false \
 	-Dloadkeys-path=/usr/bin/loadkeys \
 	-Dman=false \
+	-Dmode=release \
 	-Dnss-systemd=true \
-	-Dportabled=false \
 	-Dquotacheck-path=/usr/sbin/quotacheck \
 	-Dquotaon-path=/usr/sbin/quotaon \
 	-Drootlibdir='$(ROOTLIBDIR)' \
@@ -53,14 +56,15 @@ SYSTEMD_CONF_OPTS += \
 
 ifeq ($(BR2_ROOTFS_MERGED_USR),y)
 SYSTEMD_CONF_OPTS += \
-	-Dkexec-path=/usr/sbin/kexec \
-	-Dkmod-path=/usr/bin/kmod \
 	-Dmount-path=/usr/bin/mount \
 	-Dsulogin-path=/usr/sbin/sulogin \
 	-Dumount-path=/usr/bin/umount
 else
 SYSTEMD_CONF_OPTS += \
-	-Dsplit-usr=true
+	-Dmount-path=/bin/mount \
+	-Dsplit-usr=true \
+	-Dsulogin-path=/sbin/sulogin \
+	-Dumount-path=/bin/umount
 endif
 
 ifeq ($(BR2_PACKAGE_ACL),y)
@@ -430,6 +434,12 @@ else
 SYSTEMD_CONF_OPTS += -Dpolkit=false
 endif
 
+ifeq ($(BR2_PACKAGE_SYSTEMD_PORTABLED),y)
+SYSTEMD_CONF_OPTS += -Dportabled=true
+else
+SYSTEMD_CONF_OPTS += -Dportabled=false
+endif
+
 ifeq ($(BR2_PACKAGE_SYSTEMD_NETWORKD),y)
 SYSTEMD_CONF_OPTS += -Dnetworkd=true
 SYSTEMD_NETWORKD_USER = systemd-network -1 systemd-network -1 * - - - systemd Network Management
@@ -547,8 +557,7 @@ endef
 
 SYSTEMD_POST_INSTALL_TARGET_HOOKS += \
 	SYSTEMD_INSTALL_INIT_HOOK \
-	SYSTEMD_INSTALL_MACHINEID_HOOK \
-	SYSTEMD_INSTALL_RESOLVCONF_HOOK
+	SYSTEMD_INSTALL_MACHINEID_HOOK
 
 define SYSTEMD_INSTALL_IMAGES_CMDS
 	$(SYSTEMD_INSTALL_BOOT_FILES)
@@ -580,7 +589,9 @@ define SYSTEMD_INSTALL_NSSCONFIG_HOOK
 		$(TARGET_DIR)/etc/nsswitch.conf
 endef
 
-SYSTEMD_TARGET_FINALIZE_HOOKS += SYSTEMD_INSTALL_NSSCONFIG_HOOK
+SYSTEMD_TARGET_FINALIZE_HOOKS += \
+	SYSTEMD_INSTALL_NSSCONFIG_HOOK \
+	SYSTEMD_INSTALL_RESOLVCONF_HOOK
 
 ifneq ($(call qstrip,$(BR2_TARGET_GENERIC_GETTY_PORT)),)
 # systemd provides multiple units to autospawn getty as neede
@@ -607,7 +618,7 @@ ifneq ($(call qstrip,$(BR2_TARGET_GENERIC_GETTY_PORT)),)
 # * enable serial-getty@xxx for other $BR2_TARGET_GENERIC_TTY_PATH
 # * rewrite baudrates if a baudrate is provided
 define SYSTEMD_INSTALL_SERVICE_TTY
-	mkdir $(TARGET_DIR)$(ROOTLIBDIR)/systemd/system/getty@.service.d; \
+	mkdir -p $(TARGET_DIR)$(ROOTLIBDIR)/systemd/system/getty@.service.d; \
 	printf '[Install]\nDefaultInstance=\n' \
 		>$(TARGET_DIR)$(ROOTLIBDIR)/systemd/system/getty@.service.d/buildroot-console.conf; \
 	if [ $(BR2_TARGET_GENERIC_GETTY_PORT) = "console" ]; \
@@ -619,7 +630,7 @@ define SYSTEMD_INSTALL_SERVICE_TTY
 			$(call qstrip,$(BR2_TARGET_GENERIC_GETTY_PORT)) \
 			>$(TARGET_DIR)$(ROOTLIBDIR)/systemd/system/getty@.service.d/buildroot-console.conf; \
 	else \
-		mkdir $(TARGET_DIR)$(ROOTLIBDIR)/systemd/system/serial-getty@.service.d;\
+		mkdir -p $(TARGET_DIR)$(ROOTLIBDIR)/systemd/system/serial-getty@.service.d;\
 		printf '[Install]\nDefaultInstance=%s\n' \
 			$(call qstrip,$(BR2_TARGET_GENERIC_GETTY_PORT)) \
 			>$(TARGET_DIR)$(ROOTLIBDIR)/systemd/system/serial-getty@.service.d/buildroot-console.conf;\
@@ -674,6 +685,7 @@ HOST_SYSTEMD_CONF_OPTS = \
 	--libdir=lib \
 	--sysconfdir=/etc \
 	--localstatedir=/var \
+	-Dmode=release \
 	-Dutmp=false \
 	-Dhibernate=false \
 	-Dldconfig=false \

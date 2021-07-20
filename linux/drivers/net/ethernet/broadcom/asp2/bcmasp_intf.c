@@ -2,6 +2,7 @@
 #define pr_fmt(fmt)			"bcmasp_intf: " fmt
 
 #include <asm/byteorder.h>
+#include <linux/brcmphy.h>
 #include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/etherdevice.h>
@@ -622,6 +623,9 @@ static void bcmasp_adj_link(struct net_device *dev)
 		reg = rgmii_rl(intf, RGMII_OOB_CNTRL);
 		reg |= RGMII_MODE_EN;
 		rgmii_wl(intf, reg, RGMII_OOB_CNTRL);
+
+		intf->eee.eee_active = phy_init_eee(phydev, 0) >= 0;
+		bcmasp_eee_enable_set(intf, intf->eee.eee_active);
 	} else {
 		/* Disable RGMII pad */
 		reg = rgmii_rl(intf, RGMII_OOB_CNTRL);
@@ -940,6 +944,10 @@ static int bcmasp_netif_init(struct net_device *dev, bool phy_connect,
 			     bool init_rx)
 {
 	struct bcmasp_intf *intf = netdev_priv(dev);
+	phy_interface_t phy_iface = intf->phy_interface;
+	u32 phy_flags = PHY_BRCM_AUTO_PWRDWN_ENABLE |
+			PHY_BRCM_DIS_TXCRXC_NOENRGY |
+			PHY_BRCM_IDDQ_SUSPEND;
 	struct phy_device *phydev = NULL;
 	int ret;
 
@@ -952,6 +960,53 @@ static int bcmasp_netif_init(struct net_device *dev, bool phy_connect,
 
 	bcmasp_configure_port(intf);
 
+	/* This is an ugly quirk but we have not been correctly interpreting
+	 * the phy_interface values and we have done that across different
+	 * drivers, so at least we are consistent in our mistakes.
+	 *
+	 * When the Generic PHY driver is in use either the PHY has been
+	 * strapped or programmed correctly by the boot loader so we should
+	 * stick to our incorrect interpretation since we have validated it.
+	 *
+	 * Now when a dedicated PHY driver is in use, we need to reverse the
+	 * meaning of the phy_interface_mode values to something that the PHY
+	 * driver will interpret and act on such that we have two mistakes
+	 * canceling themselves so to speak. We only do this for the two
+	 * modes that GENET driver officially supports on Broadcom STB chips:
+	 * PHY_INTERFACE_MODE_RGMII and PHY_INTERFACE_MODE_RGMII_TXID. Other
+	 * modes are not *officially* supported with the boot loader and the
+	 * scripted environment generating Device Tree blobs for those
+	 * platforms.
+	 *
+	 * Note that internal PHY and fixed-link configurations are not
+	 * affected because they use different phy_interface_t values or the
+	 * Generic PHY driver.
+	 */
+	switch (phy_iface) {
+	case PHY_INTERFACE_MODE_RGMII:
+		phy_iface = PHY_INTERFACE_MODE_RGMII_ID;
+		break;
+	case PHY_INTERFACE_MODE_RGMII_TXID:
+		phy_iface = PHY_INTERFACE_MODE_RGMII_RXID;
+		break;
+	default:
+		break;
+	}
+
+	if (phy_connect) {
+		phydev = of_phy_connect(dev, intf->phy_dn, bcmasp_adj_link,
+					phy_flags, phy_iface);
+		if (!phydev) {
+			ret = -ENODEV;
+			netdev_err(dev, "could not attach to PHY\n");
+			goto err_phy_disable;
+		}
+	} else if (!intf->wolopts) {
+		ret = phy_resume(dev->phydev);
+		if (ret)
+			goto err_phy_disable;
+	}
+
 	umac_reset(intf);
 
 	umac_init(intf);
@@ -961,15 +1016,6 @@ static int bcmasp_netif_init(struct net_device *dev, bool phy_connect,
 
 	umac_set_hw_addr(intf, dev->dev_addr);
 
-	if (phy_connect) {
-		phydev = of_phy_connect(dev, intf->phy_dn, bcmasp_adj_link, 0,
-					intf->phy_interface);
-		if (!phydev) {
-			netdev_err(dev, "could not attach to PHY\n");
-			ret = -ENODEV;
-			goto err_phy_disable;
-		}
-	}
 	intf->old_duplex = -1;
 	intf->old_link = -1;
 	intf->old_pause = -1;
@@ -1011,7 +1057,8 @@ err_phy_disconnect:
 	if (phydev)
 		phy_disconnect(phydev);
 err_phy_disable:
-	bcmasp_ephy_enable_set(intf, false);
+	if (intf->internal_phy)
+		bcmasp_ephy_enable_set(intf, false);
 	return ret;
 }
 
@@ -1070,6 +1117,17 @@ static struct net_device_stats *bcmasp_get_stats(struct net_device *dev)
 	return &dev->stats;
 }
 
+static int bcmasp_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
+{
+	if (!netif_running(dev))
+		return -EINVAL;
+
+	if (!dev->phydev)
+		return -ENODEV;
+
+	return phy_mii_ioctl(dev->phydev, rq, cmd);
+}
+
 static const struct net_device_ops bcmasp_netdev_ops = {
 	.ndo_open		= bcmasp_open,
 	.ndo_stop		= bcmasp_stop,
@@ -1078,6 +1136,7 @@ static const struct net_device_ops bcmasp_netdev_ops = {
 	.ndo_set_rx_mode	= bcmasp_set_rx_mode,
 	.ndo_get_phys_port_name	= bcmasp_get_phys_port_name,
 	.ndo_get_stats		= bcmasp_get_stats,
+	.ndo_do_ioctl		= bcmasp_ioctl,
 };
 
 static inline void bcmasp_map_res(struct bcmasp_priv *priv,
@@ -1353,20 +1412,13 @@ int bcmasp_interface_resume(struct bcmasp_intf *intf)
 
 	bcmasp_resume_from_wol(intf);
 
-	if (!intf->wolopts) {
-		ret = phy_resume(dev->phydev);
-		if (ret)
-			goto out_phy_resume;
-	}
+	if (intf->eee.eee_enabled)
+		bcmasp_eee_enable_set(intf, true);
 
 	netif_device_attach(dev);
 
 	return 0;
 
-out_phy_resume:
-	bcmasp_netif_deinit(dev, true, true);
-	if (intf->internal_phy)
-		bcmasp_ephy_enable_set(intf, false);
 out:
 	clk_disable_unprepare(intf->parent->clk);
 	return ret;
