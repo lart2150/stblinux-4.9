@@ -53,7 +53,7 @@
  * 'pmap_cores' in drivers/soc/bcm/brcmstb/nexus/dvfs.c
  */
 static const char * const linux_cores[] = {
-	"cpu_core",
+	"cpu0",
 	"v3d",
 	"sysif",
 	"scb",
@@ -75,6 +75,10 @@ static const char * const linux_cores[] = {
 	"asp0",
 	"hvd_cabac0",
 	"axi0",
+	"bstm0",
+	"cpu1",
+	"cpu2",
+	"cpu3",
 };
 
 static const char *proto_to_str(int proto)
@@ -198,7 +202,7 @@ void prn_event_decoded(struct trace_header *th, struct event *evp,
 		       msg_id_to_str(evp->params[0], evp->params[1]));
 		if (evp->params[0] == SCMI_PROTOCOL_CLOCK &&
 		    evp->params[1] == CLOCK_CONFIG_SET) {
-			printf("clk_%sable(%s)",
+			printf("clk_%sable(%s)\n",
 			       (evp->params[3] & 0x1) ? "en" : "dis",
 			       trace_decode_clk_name(evp->params[2]));
 		} else if (evp->params[0] == SCMI_PROTOCOL_PERF

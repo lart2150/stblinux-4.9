@@ -54,7 +54,7 @@ enum brcm_protocol_cmd {
 };
 
 static const char __maybe_unused *pmap_cores[BCLK_SW_NUM_CORES] = {
-	[BCLK_SW_CPU_CORE - BCLK_SW_OFFSET] = "cpu",
+	[BCLK_SW_CPU0 - BCLK_SW_OFFSET] = "cpu0",
 	[BCLK_SW_V3D - BCLK_SW_OFFSET] = "v3d0",
 	[BCLK_SW_SYSIF - BCLK_SW_OFFSET] = "sysif0",
 	[BCLK_SW_SCB - BCLK_SW_OFFSET] = "scb0",
@@ -77,6 +77,9 @@ static const char __maybe_unused *pmap_cores[BCLK_SW_NUM_CORES] = {
 	[BCLK_SW_HVD_CABAC0 - BCLK_SW_OFFSET] = "hvd_cabac0",
 	[BCLK_SW_AXI0 - BCLK_SW_OFFSET] = "axi0",
 	[BCLK_SW_BSTM0 - BCLK_SW_OFFSET] = "bstm0",
+	[BCLK_SW_CPU1 - BCLK_SW_OFFSET] = "cpu1",
+	[BCLK_SW_CPU2 - BCLK_SW_OFFSET] = "cpu2",
+	[BCLK_SW_CPU3 - BCLK_SW_OFFSET] = "cpu3",
 };
 
 static const struct scmi_handle *handle;
@@ -227,25 +230,53 @@ static int brcm_send_show_cmd_via_scmi(struct seq_file *s,
 				       const struct scmi_handle *handle,
 				       unsigned int cmd)
 {
+#define MAX_SHOW_CHARS			256
+
+	char buf[MAX_SHOW_CHARS];
+	char *pbuf = buf;
 	int state = 0;
 	u32 params[SCMI_MAX_STRINGLEN/4 + 1]; /* state + string len */
-	char *str = (char *) &params[0]; /* out */;
+	char * const str = (char *) &params[0]; /* out */
+	ssize_t n_avail, len;
 
+	buf[0] = 0;
 	do {
+		bool continuation = false;
+
 		params[0] = state; /* in */
 		state = brcm_send_cmd_via_scmi(handle, cmd, 0,
 					     SCMI_PROTOCOL_BRCM,
 					     1, ARRAY_SIZE(params),
 					     params);
-		if (state <= 0)
+		if (state < 0)
 			break;
 
-		SEQ_PRINTF(s, "%s\n", str);
-	} while (state);
+		n_avail = MAX_SHOW_CHARS - (pbuf - &buf[0]) - 1;
+		len = strnlen(str, MAX_SHOW_CHARS - 1);
+		if (n_avail <= 0 || len > MAX_SHOW_CHARS - 1)
+			return -EIO;
 
-	if (state == 0)
-		/* last line if there is no scmi error */
-		SEQ_PRINTF(s, "%s\n", str);
+		/* If line ends in '\', drop the '\' character */
+		if (len > 0 && str[len - 1] == '\\') {
+			continuation = true;
+			str[len - 1] = 0;
+			len--;
+		}
+
+		strncat(pbuf, str, n_avail);
+		pbuf += (len < n_avail) ? len : n_avail;
+		n_avail = MAX_SHOW_CHARS - (pbuf - &buf[0]) - 1;
+
+		/* If line ends in '\', hold off on printing it */
+		if (continuation && n_avail > 1)
+			continue;
+
+		/* Print a line */
+		pbuf[0] = 0;
+		SEQ_PRINTF(s, "%s\n", buf);
+		pbuf = &buf[0];
+		buf[0] = 0;
+	} while (state > 0);
 
 	return state ? state : 0;
 }
