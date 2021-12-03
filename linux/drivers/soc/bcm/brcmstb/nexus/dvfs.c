@@ -333,9 +333,14 @@ EXPORT_SYMBOL(brcm_pmap_num_pstates);
 static int get_all_pmap_freq_info(int core_id, unsigned int *num_pstates,
 				  unsigned int *cur_pstate, unsigned int *freqs)
 {
-	struct scmi_perf_ops *perf_ops = handle->perf_ops;
+	struct scmi_perf_ops *perf_ops;
 	unsigned int domain = core_id - BCLK_SW_OFFSET;
 	int ret, i;
+
+	if (!handle)
+		return -EINVAL;
+
+	perf_ops = handle->perf_ops;
 
 	if (domain >= BCLK_SW_NUM_CORES)
 		return -EINVAL;
@@ -389,9 +394,14 @@ EXPORT_SYMBOL(brcm_pmap_get_pstate);
 int brcm_pmap_set_pstate(unsigned int core_id, unsigned int pstate)
 {
 
-	struct scmi_perf_ops *perf_ops = handle->perf_ops;
+	struct scmi_perf_ops *perf_ops;
 	unsigned int num_pstates, domain = core_id - BCLK_SW_OFFSET;
 	int ret;
+
+	if (!handle)
+		return -EINVAL;
+
+	perf_ops = handle->perf_ops;
 
 	if (domain >= BCLK_SW_NUM_CORES)
 		return -EINVAL;
@@ -431,8 +441,13 @@ int brcm_pmap_get_pstate_freqs(unsigned int core_id, u32 *freqs)
 {
 	int ret;
 	u32 freq_cnt, i;
-	struct scmi_perf_ops *perf_ops = handle->perf_ops;
+	struct scmi_perf_ops *perf_ops;
 	unsigned int domain = core_id - BCLK_SW_OFFSET;
+
+	if (!handle)
+		return -EINVAL;
+
+	perf_ops = handle->perf_ops;
 
 	if (domain >= BCLK_SW_NUM_CORES)
 		return -EINVAL;

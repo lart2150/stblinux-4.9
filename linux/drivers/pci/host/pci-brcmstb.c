@@ -953,7 +953,8 @@ static void brcm_pcie_setup_prep(struct brcm_pcie *pcie)
 	pcie->rev = EXTRACT_FIELD(tmp, PCIE_MISC_REVISION, MAJMIN);
 
 	/* Set SCB_MAX_BURST_SIZE, CFG_READ_UR_MODE, SCB_ACCESS_EN */
-	tmp = INSERT_FIELD(0, PCIE_MISC_MISC_CTRL, SCB_ACCESS_EN, 1);
+	tmp = bcm_readl(base + PCIE_MISC_MISC_CTRL);
+	tmp = INSERT_FIELD(tmp, PCIE_MISC_MISC_CTRL, SCB_ACCESS_EN, 1);
 	tmp = INSERT_FIELD(tmp, PCIE_MISC_MISC_CTRL, CFG_READ_UR_MODE, 1);
 	burst = (pcie->type == GENERIC || pcie->type == BCM7278)
 		? BURST_SIZE_512 : BURST_SIZE_256;

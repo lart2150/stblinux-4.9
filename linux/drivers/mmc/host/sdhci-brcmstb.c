@@ -200,7 +200,6 @@ static int brcmstb_select_drive_strength(struct sdhci_host *host,
 	return strength;
 }
 
-#ifdef CONFIG_PM_SLEEP
 static int sdhci_brcmstb_suspend(struct device *dev)
 {
 	struct sdhci_host *host = dev_get_drvdata(dev);
@@ -214,6 +213,7 @@ static int sdhci_brcmstb_suspend(struct device *dev)
 	return res;
 }
 
+#ifdef CONFIG_PM_SLEEP
 static int sdhci_brcmstb_resume(struct device *dev)
 {
 	struct sdhci_host *host = dev_get_drvdata(dev);
@@ -397,7 +397,11 @@ err_clk:
 
 static void sdhci_brcmstb_shutdown(struct platform_device *pdev)
 {
-	sdhci_pltfm_suspend(&pdev->dev);
+	struct sdhci_host *host = platform_get_drvdata(pdev);
+
+	/* Cancel possible rescan worker thread */
+	cancel_delayed_work_sync(&host->mmc->detect);
+	sdhci_brcmstb_suspend(&pdev->dev);
 }
 
 MODULE_DEVICE_TABLE(of, sdhci_brcm_of_match);
