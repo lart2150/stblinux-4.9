@@ -1,0 +1,83 @@
+From ea5250015458bcddb88d7ddd329ea4169f8e1cbb Mon Sep 17 00:00:00 2001
+From: "Andrew G. Morgan" <morgan@kernel.org>
+Date: Wed, 11 Aug 2021 19:54:29 -0700
+Subject: [PATCH] Support CC=clang again.
+
+I didn't realize CC=clang used to work. Now it does again.
+I've also added a test build for clang in distcheck.
+
+This fixes:
+
+  https://bugzilla.kernel.org/show_bug.cgi?id=214047
+
+Also, add a note about pam_cap.so building after debugging:
+
+  https://bugzilla.kernel.org/show_bug.cgi?id=214023
+
+Finally, removed a redundant LDFLAGS link directory override.
+
+Slight tweaks to make this patch apply to 2.52 by
+Markus Mayer <mmayer@broadcom.com>.
+
+Signed-off-by: Andrew G. Morgan <morgan@kernel.org>
+Signed-off-by: Markus Mayer <mmayer@broadcom.com>
+---
+ Make.Rules       | 1 -
+ Makefile         | 1 +
+ libcap/Makefile  | 2 +-
+ pam_cap/Makefile | 2 +-
+ 4 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/Make.Rules b/Make.Rules
+index 8f7906c97bcd..108463e71017 100644
+--- a/Make.Rules
++++ b/Make.Rules
+@@ -79,7 +79,6 @@ BUILD_GPERF := $(shell which gperf >/dev/null 2>/dev/null && echo yes)
+ 
+ SYSTEM_HEADERS = /usr/include
+ INCS=$(topdir)/libcap/include/sys/capability.h
+-LDFLAGS += -L$(topdir)/libcap
+ CFLAGS += -Dlinux $(WARNINGS) $(DEBUG)
+ INDENT := $(shell if [ -n "$$(which indent 2>/dev/null)" ]; then echo "| indent -kr" ; fi)
+ 
+diff --git a/Makefile b/Makefile
+index 984d5028dba0..d26af01c211d 100644
+--- a/Makefile
++++ b/Makefile
+@@ -70,6 +70,7 @@ distcheck:
+ 	$(MAKE) DYNAMIC=yes clean all test sudotest
+ 	$(MAKE) DYNAMIC=no COPTS="-O2 -std=c89" clean all test sudotest
+ 	$(MAKE) PAM_CAP=no CC=/usr/local/musl/bin/musl-gcc clean all test sudotest
++	$(MAKE) CC=clang clean all test sudotest
+ 	$(MAKE) clean all test sudotest
+ 	$(MAKE) distclean
+ 
+diff --git a/libcap/Makefile b/libcap/Makefile
+index 47cf8f48c1d6..906fe981a8f4 100644
+--- a/libcap/Makefile
++++ b/libcap/Makefile
+@@ -20,7 +20,7 @@ PSXMAGICOBJ=psx_magic.o
+ 
+ # The linker magic needed to build a dynamic library as independently
+ # executable
+-MAGIC=--entry=__so_start
++MAGIC=-Wl,-e,__so_start
+ 
+ INCLS=libcap.h cap_names.h $(INCS)
+ GPERF_OUTPUT = _caps_output.gperf
+diff --git a/pam_cap/Makefile b/pam_cap/Makefile
+index a4c48917a25e..eb67d6af3d48 100644
+--- a/pam_cap/Makefile
++++ b/pam_cap/Makefile
+@@ -22,7 +22,7 @@ execable.o: execable.c ../libcap/execable.h ../libcap/loader.txt
+ 	$(CC) $(CFLAGS) $(IPATH) -DLIBCAP_VERSION=\"libcap-$(VERSION).$(MINOR)\" -DSHARED_LOADER=\"$(shell cat ../libcap/loader.txt)\" -c execable.c -o $@
+ 
+ pam_cap.so: pam_cap.o execable.o
+-	$(LD) -o pam_cap.so $+ $(LIBCAPLIB) $(LDFLAGS) --entry=__so_start
++	$(LD) -o pam_cap.so $+ $(LIBCAPLIB) $(LDFLAGS) -Wl,-e,__so_start
+ 
+ pam_cap.o: pam_cap.c
+ 	$(CC) $(CFLAGS) $(IPATH) -c $< -o $@
+-- 
+2.25.1
+

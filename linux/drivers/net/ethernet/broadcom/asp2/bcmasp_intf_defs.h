@@ -92,6 +92,9 @@
 #define   RGMII_PORT_MODE_EXT_RVMII	4
 #define   RGMII_PORT_MODE_MASK		GENMASK(2, 0)
 
+#define RGMII_SYS_LED_CNTRL		0x74
+#define  RGMII_SYS_LED_CNTRL_LINK_OVRD	BIT(15)
+
 #define TX_SPB_DMA_OFFSET(intf) \
 	((((intf)->channel) * 0x30) + 0x48180)
 #define  TX_SPB_DMA_READ		0x00

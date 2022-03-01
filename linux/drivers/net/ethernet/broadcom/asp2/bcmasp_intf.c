@@ -826,10 +826,19 @@ static void bcmasp_ephy_enable_set(struct bcmasp_intf *intf, bool enable)
 	}
 	rgmii_wl(intf, reg, RGMII_EPHY_CNTRL);
 	mdelay(1);
+
+	/* Set or clear the LED control override to avoid lighting up LEDs
+	 * while the EPHY is powered off and drawing unnecessary current.
+	 */
+	reg = rgmii_rl(intf, RGMII_SYS_LED_CNTRL);
+	if (enable)
+		reg &= ~RGMII_SYS_LED_CNTRL_LINK_OVRD;
+	else
+		reg |= RGMII_SYS_LED_CNTRL_LINK_OVRD;
+	rgmii_wl(intf, reg, RGMII_SYS_LED_CNTRL);
 }
 
-static void bcmasp_netif_deinit(struct net_device *dev, bool stop_phy,
-				bool stop_rx)
+static void bcmasp_netif_deinit(struct net_device *dev, bool stop_rx)
 {
 	struct bcmasp_intf *intf = netdev_priv(dev);
 	u32 reg, timeout = 1000;
@@ -850,13 +859,12 @@ static void bcmasp_netif_deinit(struct net_device *dev, bool stop_phy,
 
 	umac_enable_set(intf, UMC_CMD_TX_EN, 0);
 
-	if (stop_phy)
-		phy_stop(dev->phydev);
+	phy_stop(dev->phydev);
 
 	/* Shut down RX */
 	umac_enable_set(intf, UMC_CMD_RX_EN, 0);
 
-	if (stop_phy || stop_rx) {
+	if (stop_rx) {
 		bcmasp_flush_rx_port(intf);
 		usleep_range(1000, 2000);
 		bcmasp_enable_rx(intf, 0);
@@ -871,7 +879,7 @@ static void bcmasp_netif_deinit(struct net_device *dev, bool stop_phy,
 	netif_napi_del(&intf->tx_napi);
 	bcmasp_reclaim_free_all_tx(intf);
 
-	if (stop_phy || stop_rx) {
+	if (stop_rx) {
 		netif_napi_del(&intf->rx_napi);
 		bcmasp_reclaim_free_all_rx(intf);
 	}
@@ -886,7 +894,7 @@ static int bcmasp_stop(struct net_device *dev)
 	/* Stop tx from updating HW */
 	netif_tx_disable(dev);
 
-	bcmasp_netif_deinit(dev, true, true);
+	bcmasp_netif_deinit(dev, true);
 
 	phy_disconnect(dev->phydev);
 
@@ -1178,15 +1186,14 @@ static irqreturn_t bcmasp_wol_isr(int irq, void *dev_id)
 }
 
 struct bcmasp_intf *bcmasp_interface_create(struct bcmasp_priv *priv,
-					    struct device_node *ndev_dn,
-					    int wol_irq)
+					    struct device_node *ndev_dn)
 {
 	struct device *dev = &priv->pdev->dev;
 	const char *phy_mode_str = NULL;
 	struct bcmasp_intf *intf;
 	struct net_device *ndev;
 	const void *macaddr;
-	int ch, port, ret;
+	int ch, port, ret, wol_irq;
 
 	if (of_property_read_u32(ndev_dn, "reg", &port)) {
 		dev_warn(dev, "%s: invalid ch number\n", ndev_dn->name);
@@ -1205,6 +1212,7 @@ struct bcmasp_intf *bcmasp_interface_create(struct bcmasp_priv *priv,
 	}
 	intf = netdev_priv(ndev);
 
+	wol_irq = platform_get_irq(priv->pdev, port + 1);
 	/* Interrupt is optional */
 	if (wol_irq > 0) {
 		intf->wol_irq_disabled = true;
@@ -1354,7 +1362,7 @@ int bcmasp_interface_suspend(struct bcmasp_intf *intf, bool *wol_keep_rx_en)
 
 	netif_device_detach(dev);
 
-	bcmasp_netif_deinit(dev, false, !keep_rx);
+	bcmasp_netif_deinit(dev, !keep_rx);
 
 	if (!intf->wolopts) {
 		ret = phy_suspend(dev->phydev);

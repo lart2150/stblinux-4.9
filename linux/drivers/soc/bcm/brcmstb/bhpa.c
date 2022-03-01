@@ -439,18 +439,19 @@ static struct page *bhpa_get_free_range_in_zone(struct zone *zone,
 						unsigned int order)
 {
 	struct page *free_page = NULL;
+	unsigned long flags;
 
 	if (!populated_zone(zone))
 		return NULL;
 	B_LOG_TRACE("free_range: zone:%p %s at %lx",
 		    (void *)zone, zone->name, zone->zone_start_pfn);
-	spin_lock(&zone->lock);
 	for (; order < MAX_ORDER; order++) {
 		struct free_area *area = &(zone->free_area[order]);
 		struct page *page;
 
 		B_LOG_TRACE("free_range: zone:%p area:%p order:%u migratetype:%u",
 			    (void *)zone, (void *)area, order, migratetype);
+		spin_lock_irqsave(&zone->lock, flags);
 		list_for_each_entry(page, &area->free_list[migratetype], lru) {
 			unsigned long pfn;
 
@@ -465,10 +466,10 @@ static struct page *bhpa_get_free_range_in_zone(struct zone *zone,
 				break;
 			}
 		}
+		spin_unlock_irqrestore(&zone->lock, flags);
 		if (free_page)
 			break;
 	}
-	spin_unlock(&zone->lock);
 	return free_page;
 }
 

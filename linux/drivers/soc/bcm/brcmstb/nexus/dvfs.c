@@ -42,7 +42,7 @@ do {						\
 
 enum brcm_protocol_cmd {
 	BRCM_SEND_AVS_CMD = 0x3,
-	BRCM_CLK_SHOW_CMD = 0x4,
+	BRCM_CLK_SHOW_CMD = 0x4, /* obsoleted */
 	BRCM_PMAP_SHOW_CMD = 0x5,
 	BRCM_CLK_SHOW_NEW_CMD = 0x6,
 	BRCM_RESET_ENABLE_CMD = 0x7,
@@ -51,6 +51,7 @@ enum brcm_protocol_cmd {
 	BRCM_SCMI_STATS_SHOW_CMD = 0xa,
 	BRCM_SCMI_STATS_RESET_CMD = 0xb,
 	BRCM_TRACE_LOG_ON_CMD = 0xc,
+	BRCM_GET_CLK_VER_STR = 0xd,
 };
 
 static const char __maybe_unused *pmap_cores[BCLK_SW_NUM_CORES] = {
@@ -536,6 +537,31 @@ struct trace_log_dfs_info {
 
 static struct dentry *rootdir;
 static struct trace_log_dfs_info tldfs;
+
+
+static int brcm_scmi_get_clk_ver_str(char *str, unsigned int buf_len)
+{
+#define MAX_CLK_VER_CHARS 64
+	u32 params[(MAX_CLK_VER_CHARS + 3) / 4];
+	const int nparams = ARRAY_SIZE(params);
+	const size_t max_len = buf_len < sizeof(params) ? buf_len : sizeof(params);
+	int ret;
+
+	if (!str)
+		return -EINVAL;
+	*str = 0;
+
+	clk_api_lock();
+	ret = brcm_send_cmd_via_scmi(handle, BRCM_GET_CLK_VER_STR, 0,
+				     SCMI_PROTOCOL_BRCM, 0, nparams, params);
+	clk_api_unlock();
+
+	if (ret == 0)
+		strncpy(str, (const char *)params, max_len - 1);
+	str[max_len - 1] = 0;
+
+	return ret;
+}
 
 static int brcm_scmi_stats_show(struct seq_file *s, void *data)
 {
@@ -1330,6 +1356,31 @@ int brcmstb_avs_get_pmic_reg_status(u8 regulator, u16 *voltage,
 }
 EXPORT_SYMBOL(brcmstb_avs_get_pmic_reg_status);
 
+static void clk_blob_ver_check(struct scmi_device *sdev)
+{
+	struct device_node *dn = sdev->dev.of_node;
+	char ams_clk_ver_str[64];
+	const char *bolt_clk_ver_str = NULL;
+
+	ams_clk_ver_str[0] = 0;
+
+	if (dn
+	    && of_property_read_string(dn, "brcm,clk-ver", &bolt_clk_ver_str) == 0
+	    && brcm_scmi_get_clk_ver_str(ams_clk_ver_str, sizeof(ams_clk_ver_str)) == 0
+	    && ams_clk_ver_str[0]) {
+		if (strcmp(bolt_clk_ver_str, ams_clk_ver_str)) {
+			dev_err(&sdev->dev, "ClkVerTest: FAIL: Clock version string mismatch:\n");
+			dev_err(&sdev->dev, "                : BOLT %s\n", bolt_clk_ver_str);
+			dev_err(&sdev->dev, "                :  AMS %s\n", ams_clk_ver_str);
+		} else {
+			dev_dbg(&sdev->dev, "ClkVerTest: PASS: %s\n", ams_clk_ver_str);
+		}
+	} else {
+		dev_dbg(&sdev->dev, "ClkVerTest: PASS: by default; cannot test\n");
+	}
+}
+
+
 static int brcm_scmi_dvfs_probe(struct scmi_device *sdev)
 {
 	int value = 0;
@@ -1343,6 +1394,7 @@ static int brcm_scmi_dvfs_probe(struct scmi_device *sdev)
 	brcm_scmi_debug_init();
 	brcm_trace_log_debug_init();
 #endif
+	clk_blob_ver_check(sdev);
 
 	/* This tells AVS we are using the new API */
 	(void)brcmstb_stb_avs_read_debug(0, &value);

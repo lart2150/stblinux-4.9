@@ -42,6 +42,7 @@ use constant HTTP_USER_AGENT => q(BRCMSTB/br_config.pl );
 use constant LLVM_MIN_KERNEL => qw(5.4);
 use constant LLVM_WRAPPER => qw(llvm-wrapper.pl);
 use constant MERGED_FRAGMENT => qw(merged_fragment);
+use constant OVERLAY_DIR => qw(board/brcmstb/overlay);
 use constant PRIVATE_CCACHE => qw($(HOME)/.buildroot-ccache);
 use constant SHARED_OSS_DIR => qw(/projects/stbdev/open-source);
 use constant SHARED_CCACHE =>  SHARED_OSS_DIR . qw(/buildroot-ccache);
@@ -61,7 +62,6 @@ use constant STALE_THRESHOLD => 7 * 24 * 60 * 60; 	# days in seconds
 use constant WORLD_PERMS => (S_IRWXG | S_IRWXO);
 
 use constant LLVM_DISABLE_PKGS => qw(
-	BR2_PACKAGE_ELFUTILS
 	BR2_LINUX_KERNEL_TOOL_PERF
 	BR2_PACKAGE_LINUX_TOOLS_PERF
 	BR2_PACKAGE_PERF
@@ -1090,6 +1090,14 @@ sub parse_cmdline_fragments($$)
 			# quote at the end is the same as at the beginning.
 			$frag =~ s/^(["'])(.*)\1$/$2/;
 		}
+		# Quote the string value of the fragment. Boolean and integer
+		# values do not need quotes.
+		if ($frag =~ /^(\w+)=([^"].*)/) {
+			my ($var, $val) = ($1, $2);
+			if ($val ne 'y' && $val =~ /\D/) {
+				$frag = "$var=\"$val\"";
+			}
+		}
 		print(F "$frag\n");
 	}
 	close(F);
@@ -1948,6 +1956,11 @@ if (defined($br_mirror)) {
 	print("Using $br_mirror as Buildroot mirror...\n");
 } else {
 	print("Not using a Buildroot mirror...\n");
+}
+
+if (-d OVERLAY_DIR) {
+	print("Found overlay directory ".OVERLAY_DIR."...\n");
+	$generic_config{'BR2_ROOTFS_OVERLAY'} = OVERLAY_DIR;
 }
 
 get_32bit_runtime($arch, $toolchain, $opts{'3'}) if ($is_64bit);

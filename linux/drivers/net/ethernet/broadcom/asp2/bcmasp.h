@@ -507,8 +507,7 @@ BCMASP_CORE_IO_MACRO(rx_edpkt, ASP_EDPKT_OFFSET);
 BCMASP_CORE_IO_MACRO(ctrl, ASP_CTRL);
 
 struct bcmasp_intf *bcmasp_interface_create(struct bcmasp_priv *priv,
-					    struct device_node *ndev_dn,
-					    int wol_irq);
+					    struct device_node *ndev_dn);
 
 void bcmasp_interface_destroy(struct bcmasp_intf *intf, bool unregister);
 

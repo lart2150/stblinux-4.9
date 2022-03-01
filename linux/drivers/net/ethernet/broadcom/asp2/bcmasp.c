@@ -1081,7 +1081,7 @@ static int bcmasp_probe(struct platform_device *pdev)
 	struct bcmasp_priv *priv;
 	struct device_node *ports_node, *intf_node;
 	struct device *dev = &pdev->dev;
-	int ret, i, wol_irq, count = 0;
+	int ret, i, count = 0;
 	struct bcmasp_intf *intf;
 	struct resource *r;
 	u32 u32_reserved_filters_bitmask;
@@ -1194,11 +1194,8 @@ static int bcmasp_probe(struct platform_device *pdev)
 	 * interfaces are unable to come up)
 	 */
 	i = 0;
-	for_each_available_child_of_node(ports_node, intf_node) {
-		wol_irq = platform_get_irq(pdev, i + 1);
-		priv->intfs[i++] = bcmasp_interface_create(priv, intf_node,
-							   wol_irq);
-	}
+	for_each_available_child_of_node(ports_node, intf_node)
+		priv->intfs[i++] = bcmasp_interface_create(priv, intf_node);
 
 	/* Drop the clock reference count now and let ndo_open()/ndo_close()
 	 * manage it for us from now on.
