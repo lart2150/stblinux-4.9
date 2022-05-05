@@ -27,9 +27,11 @@
 
 #define SDHCI_VENDOR 0x78
 #define  SDHCI_VENDOR_ENHANCED_STRB 0x1
+#define  SDHCI_VENDOR_GATE_SDCLK_EN 0x2
 
 #define BRCMSTB_PRIV_FLAGS_NO_64BIT		BIT(0)
 #define BRCMSTB_PRIV_FLAGS_BROKEN_TIMEOUT	BIT(1)
+#define BRCMSTB_PRIV_FLAGS_HAS_CLK_GATE		BIT(2)
 
 #define DRIVER_STRENGTH_A 1	/* 1.5x */
 #define DRIVER_STRENGTH_B 0	/* 1.0x */
@@ -261,6 +263,7 @@ static const struct brcmstb_match_priv match_priv_7216 = {
 	.hs400es = sdhci_brcmstb_hs400es,
 	.execute_tuning = sdhci_brcmstb_execute_tuning,
 	.ops = &sdhci_brcmstb_ops_7216,
+	.flags = BRCMSTB_PRIV_FLAGS_HAS_CLK_GATE,
 };
 
 static const struct of_device_id sdhci_brcm_of_match[] = {
@@ -285,6 +288,7 @@ static int sdhci_brcmstb_probe(struct platform_device *pdev)
 	const char *strength;
 	struct clk *clk;
 	int res;
+	u32 reg;
 
 	match = of_match_node(sdhci_brcm_of_match, pdev->dev.of_node);
 	match_priv = match->data;
@@ -381,9 +385,21 @@ static int sdhci_brcmstb_probe(struct platform_device *pdev)
 
 	if (match_priv->flags & BRCMSTB_PRIV_FLAGS_BROKEN_TIMEOUT)
 		host->quirks |= SDHCI_QUIRK_BROKEN_TIMEOUT_VAL;
+
 	res = sdhci_add_host(host);
 	if (res)
 		goto err;
+
+	/*
+	 * If the controller supports clock gating, enable it.
+	 * NOTE: This must be done after sdhci_add_host() because
+	 * it does a controller reset which will clear the bit.
+	 */
+	if (match_priv->flags & BRCMSTB_PRIV_FLAGS_HAS_CLK_GATE) {
+		reg = sdhci_readl(host, SDHCI_VENDOR);
+		reg |= SDHCI_VENDOR_GATE_SDCLK_EN;
+		sdhci_writel(host, reg, SDHCI_VENDOR);
+	}
 
 	pltfm_host->clk = clk;
 	return res;

@@ -4,7 +4,7 @@
 #
 ################################################################################
 
-E2FSPROGS_VERSION = 1.46.4
+E2FSPROGS_VERSION = 1.46.5
 E2FSPROGS_SOURCE = e2fsprogs-$(E2FSPROGS_VERSION).tar.xz
 E2FSPROGS_SITE = $(BR2_KERNEL_MIRROR)/linux/kernel/people/tytso/e2fsprogs/v$(E2FSPROGS_VERSION)
 E2FSPROGS_LICENSE = GPL-2.0, MIT-like with advertising clause (libss and libet)
@@ -68,7 +68,7 @@ E2FSPROGS_CONF_ENV += ac_cv_func_fallocate=no
 endif
 
 E2FSPROGS_CONF_ENV += ac_cv_path_LDCONFIG=true
-E2FSPROGS_CONF_ENV += PKG_CONFIG_PATH="$(TARGET_DIR)/usr/$(BR2_ROOTFS_LIB_DIR)/pkgconfig"
+E2FSPROGS_CONF_ENV += PKG_CONFIG_PATH="$(TARGET_DIR)/usr/$(ROOTFS_LIB_DIR)/pkgconfig"
 
 HOST_E2FSPROGS_CONF_ENV += ac_cv_path_LDCONFIG=true
 
