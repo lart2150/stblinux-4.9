@@ -1166,6 +1166,35 @@ static __init int bhpa_add_memory(struct bhpa_region *p)
 	return rc;
 }
 
+void brcmstb_hugepage_print(struct seq_file *seq)
+{
+	brcmstb_hpa_print(seq);
+}
+EXPORT_SYMBOL(brcmstb_hugepage_print);
+
+int brcmstb_hugepage_alloc(unsigned int memcIndex, uint64_t *pages,
+			   unsigned int count, unsigned int *allocated,
+			   const struct brcmstb_range *range)
+{
+	return brcmstb_hpa_alloc(memcIndex, pages, count, allocated, range, 0);
+}
+EXPORT_SYMBOL(brcmstb_hugepage_alloc);
+
+int __brcmstb_hugepage_alloc(unsigned int memcIndex, uint64_t *pages,
+			     unsigned int count, unsigned int *allocated,
+			     const struct brcmstb_range *range, gfp_t flags)
+{
+	return brcmstb_hpa_alloc(memcIndex, pages, count, allocated, range, flags);
+}
+EXPORT_SYMBOL(__brcmstb_hugepage_alloc);
+
+void brcmstb_hugepage_free(unsigned int memcIndex, const uint64_t *pages,
+			   unsigned int count)
+{
+	return brcmstb_hpa_free(memcIndex, pages, count);
+}
+EXPORT_SYMBOL(brcmstb_hugepage_free);
+
 static int __init bhpa_init(void)
 {
 	int rc, i;

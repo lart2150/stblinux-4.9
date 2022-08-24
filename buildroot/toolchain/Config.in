@@ -117,7 +117,8 @@ config BR2_TOOLCHAIN_HAS_GCC_BUG_43744
 	depends on !BR2_TOOLCHAIN_GCC_AT_LEAST_8 || \
 		BR2_TOOLCHAIN_GCC_AT_LEAST_9 || \
 		BR2_TOOLCHAIN_GCC_AT_LEAST_10 || \
-		BR2_TOOLCHAIN_GCC_AT_LEAST_11
+		BR2_TOOLCHAIN_GCC_AT_LEAST_11 || \
+		BR2_TOOLCHAIN_GCC_AT_LEAST_12
 
 # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=63261. This bug no
 # longer exists in gcc 8.x.
@@ -150,7 +151,8 @@ config BR2_TOOLCHAIN_HAS_GCC_BUG_68485
 config BR2_TOOLCHAIN_HAS_GCC_BUG_83143
 	bool
 	default y if BR2_sh
-	depends on !BR2_TOOLCHAIN_GCC_AT_LEAST_10 || BR2_TOOLCHAIN_GCC_AT_LEAST_11
+	depends on !BR2_TOOLCHAIN_GCC_AT_LEAST_10 || BR2_TOOLCHAIN_GCC_AT_LEAST_11 || \
+		   BR2_TOOLCHAIN_GCC_AT_LEAST_12
 
 # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=85180. This bug no
 # longer exists in gcc 8.x.
@@ -197,7 +199,7 @@ config BR2_TOOLCHAIN_HAS_GCC_BUG_99140
 # still exists in gcc = 11.1.0
 config BR2_TOOLCHAIN_HAS_GCC_BUG_101737
 	bool
-	default y if BR2_sh4
+	default y if BR2_sh
 
 # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=101915
 # ICE: in extract_insn, at recog.c:2294 on microblaze.
@@ -570,6 +572,10 @@ config BR2_TOOLCHAIN_HEADERS_AT_LEAST_5_15
 config BR2_TOOLCHAIN_HEADERS_AT_LEAST_5_16
 	bool
 	select BR2_TOOLCHAIN_HEADERS_AT_LEAST_5_15
+
+config BR2_TOOLCHAIN_HEADERS_AT_LEAST_5_17
+	bool
+	select BR2_TOOLCHAIN_HEADERS_AT_LEAST_5_16
 	select BR2_TOOLCHAIN_HEADERS_LATEST
 
 # This should be selected by the latest version, above, to indicate that
@@ -740,10 +746,15 @@ config BR2_TOOLCHAIN_GCC_AT_LEAST_11
 	bool
 	select BR2_TOOLCHAIN_GCC_AT_LEAST_10
 
+config BR2_TOOLCHAIN_GCC_AT_LEAST_12
+	bool
+	select BR2_TOOLCHAIN_GCC_AT_LEAST_11
+
 # This order guarantees that the highest version is set, as kconfig
 # stops affecting a value on the first matching default.
 config BR2_TOOLCHAIN_GCC_AT_LEAST
 	string
+	default "12"	if BR2_TOOLCHAIN_GCC_AT_LEAST_12
 	default "11"	if BR2_TOOLCHAIN_GCC_AT_LEAST_11
 	default "10"	if BR2_TOOLCHAIN_GCC_AT_LEAST_10
 	default "9"	if BR2_TOOLCHAIN_GCC_AT_LEAST_9

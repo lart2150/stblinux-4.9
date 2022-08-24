@@ -67,7 +67,7 @@ static int brcmstb_psci_integ_region_reset_all(void)
 static int psci_system_suspend(unsigned long unused)
 {
 	return invoke_psci_fn(PSCI_FN_NATIVE(1_0, SYSTEM_SUSPEND),
-			      virt_to_phys(cpu_resume), 0, 0);
+			      __pa_symbol(cpu_resume), 0, 0);
 }
 
 int brcmstb_psci_system_mem_finish(void)
@@ -240,7 +240,7 @@ static ssize_t brcmstb_psci_version_show(struct kobject *kobj,
 }
 
 static struct kobj_attribute brcmstb_psci_version_attr =
-	__ATTR(brcmstb_mon_version, 0400, brcmstb_psci_version_show, NULL);
+	__ATTR(mon_version, 0400, brcmstb_psci_version_show, NULL);
 
 static ssize_t brcmstb_psci_cpu_retention_show(struct kobject *kobj,
 					       struct kobj_attribute *attr,
@@ -268,8 +268,14 @@ static ssize_t brcmstb_psci_cpu_retention_store(struct kobject *kobj,
 }
 
 static struct kobj_attribute brcmstb_psci_cpu_retention_attr =
-	__ATTR(brcmstb_cpu_retention, 0644, brcmstb_psci_cpu_retention_show,
+	__ATTR(cpu_retention, 0644, brcmstb_psci_cpu_retention_show,
 	       brcmstb_psci_cpu_retention_store);
+
+static const struct attribute *brcmstb_psci_attributes[] = {
+	&brcmstb_psci_version_attr.attr,
+	&brcmstb_psci_cpu_retention_attr.attr,
+	NULL,
+};
 
 int brcmstb_pm_psci_init(void)
 {
@@ -279,6 +285,7 @@ int brcmstb_pm_psci_init(void)
 		SIP_FUNC_INTEG_REGION_DEL,
 		SIP_FUNC_INTEG_REGION_RESET_ALL,
 	};
+	struct kobject *brcmstb_kobj;
 	struct arm_smccc_res res = { };
 	unsigned int i;
 	int ret;
@@ -347,14 +354,15 @@ int brcmstb_pm_psci_init(void)
 	if (ret)
 		return ret;
 
-	ret = sysfs_create_file(firmware_kobj, &brcmstb_psci_version_attr.attr);
-	if (ret)
-		return ret;
-
-	ret = sysfs_create_file(firmware_kobj,
-				&brcmstb_psci_cpu_retention_attr.attr);
-	if (ret)
-		return ret;
+	brcmstb_kobj = kobject_create_and_add("brcmstb", firmware_kobj);
+	if (brcmstb_kobj) {
+		ret = sysfs_create_files(brcmstb_kobj, brcmstb_psci_attributes);
+		if (ret) {
+			kobject_del(brcmstb_kobj);
+			kobject_put(brcmstb_kobj);
+			return ret;
+		}
+	}
 
 	brcmstb_pm_method = BRCMSTB_PM_PSCI_FULL;
 	pm_power_off = brcmstb_psci_sys_poweroff;

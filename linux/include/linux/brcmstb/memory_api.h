@@ -126,7 +126,7 @@ extern bool brcmstb_memory_override_defaults;
 /* May be set to true by any CLI option to convert bmem ranges to bhpa */
 extern bool brcmstb_bmem_is_bhpa;
 
-
+#ifdef CONFIG_BRCMSTB_HUGEPAGES
 int brcmstb_hugepage_alloc(unsigned int memcIndex, uint64_t *pages,
 			   unsigned int count, unsigned int *allocated,
 			   const struct brcmstb_range *range);
@@ -135,6 +135,29 @@ int __brcmstb_hugepage_alloc(unsigned int memcIndex, uint64_t *pages,
 			     const struct brcmstb_range *range, gfp_t flags);
 void brcmstb_hugepage_free(unsigned int memcIndex, const uint64_t *pages,
 			   unsigned int count);
+#else
+static inline
+int brcmstb_hugepage_alloc(unsigned int memcIndex, uint64_t *pages,
+			   unsigned int count, unsigned int *allocated,
+			   const struct brcmstb_range *range)
+{
+	return -ENOSYS;
+}
+
+static inline
+int __brcmstb_hugepage_alloc(unsigned int memcIndex, uint64_t *pages,
+			     unsigned int count, unsigned int *allocated,
+			     const struct brcmstb_range *range, gfp_t flags)
+{
+	return -ENOSYS;
+}
+
+static inline
+void brcmstb_hugepage_free(unsigned int memcIndex, const uint64_t *pages,
+			   unsigned int count)
+{
+}
+#endif /* CONFIG_BRCMSTB_HUGEPAGES */
 
 void __iomem *brcmstb_ioremap(phys_addr_t phys_addr, size_t size);
 void brcmstb_iounmap(volatile void __iomem *io_addr);

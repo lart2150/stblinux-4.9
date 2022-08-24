@@ -87,6 +87,8 @@
 #define BCLK_SW_VEC		(BCLK_SW_OFFSET + 0x42)
 #define BCLK_SW_XPT_WAKEUP	(BCLK_SW_OFFSET + 0x43)
 #define BCLK_SW_TSIO		(BCLK_SW_OFFSET + 0x44)
+#define BCLK_SW_MBVN		(BCLK_SW_OFFSET + 0x45)
+#define BCLK_SW_RAAGA0_WAKEUP	(BCLK_SW_OFFSET + 0x46)
 
 /* Let's keep the SRAM clocks in their own group */
 #define BCLK_SW_AIO_SRAM	(BCLK_SW_OFFSET + 0x60)

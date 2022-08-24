@@ -524,21 +524,6 @@ int brcm_overtemp_reset(unsigned int reset_temp)
 }
 EXPORT_SYMBOL(brcm_overtemp_reset);
 
-#ifdef CONFIG_DEBUG_FS
-#include <linux/debugfs.h>
-
-struct trace_log_dfs_info {
-	struct dentry *d_tlroot;
-	uint32_t active;
-	uint32_t flag;
-	uint64_t logbuf_paddr;
-	uint32_t logbuf_size;
-};
-
-static struct dentry *rootdir;
-static struct trace_log_dfs_info tldfs;
-
-
 static int brcm_scmi_get_clk_ver_str(char *str, unsigned int buf_len)
 {
 #define MAX_CLK_VER_CHARS 64
@@ -562,6 +547,21 @@ static int brcm_scmi_get_clk_ver_str(char *str, unsigned int buf_len)
 
 	return ret;
 }
+
+#ifdef CONFIG_DEBUG_FS
+#include <linux/debugfs.h>
+
+struct trace_log_dfs_info {
+	struct dentry *d_tlroot;
+	uint32_t active;
+	uint32_t flag;
+	uint64_t logbuf_paddr;
+	uint32_t logbuf_size;
+};
+
+static struct dentry *rootdir;
+static struct trace_log_dfs_info tldfs;
+
 
 static int brcm_scmi_stats_show(struct seq_file *s, void *data)
 {

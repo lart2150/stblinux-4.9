@@ -1133,8 +1133,8 @@ static int __maybe_unused brcmuart_resume(struct device *dev)
 		/* Restore RTS */
 		spin_lock_irqsave(&port->lock, flags);
 		port->mctrl |= TIOCM_RTS;
-		spin_unlock_irqrestore(&port->lock, flags);
 		port->ops->set_mctrl(port, port->mctrl);
+		spin_unlock_irqrestore(&port->lock, flags);
 	}
 
 	return 0;

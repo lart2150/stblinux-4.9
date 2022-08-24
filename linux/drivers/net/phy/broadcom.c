@@ -707,6 +707,67 @@ static int brcm_fet_config_intr(struct phy_device *phydev)
 	return err;
 }
 
+static int brcm_fet_suspend(struct phy_device *phydev)
+{
+	int reg, err, err2, brcmtest;
+
+	mutex_lock(&phydev->lock);
+
+	/* We cannot use a read/modify/write here otherwise the PHY continues
+	 * to drive LEDs which defeats the purpose of low power mode.
+	 */
+	err = phy_write(phydev, MII_BMCR, BMCR_PDOWN);
+	if (err < 0)
+		goto out;
+
+	/* Enable shadow register access */
+	brcmtest = phy_read(phydev, MII_BRCM_FET_BRCMTEST);
+	if (brcmtest < 0) {
+		err = brcmtest;
+		goto out;
+	}
+
+	reg = brcmtest | MII_BRCM_FET_BT_SRE;
+
+	err = phy_write(phydev, MII_BRCM_FET_BRCMTEST, reg);
+	if (err < 0)
+		goto out;
+
+	/* Set standby mode */
+	reg = phy_read(phydev, MII_BRCM_FET_SHDW_AUXMODE4);
+	if (reg < 0) {
+		err = reg;
+		goto done;
+	}
+
+	reg |= MII_BRCM_FET_SHDW_AM4_STANDBY;
+
+	err = phy_write(phydev, MII_BRCM_FET_SHDW_AUXMODE4, reg);
+	if (err < 0)
+		goto done;
+
+done:
+	/* Disable shadow register access */
+	err2 = phy_write(phydev, MII_BRCM_FET_BRCMTEST, brcmtest);
+	if (!err)
+		err = err2;
+out:
+	mutex_unlock(&phydev->lock);
+
+	return err;
+}
+
+static int brcm_fet_resume(struct phy_device *phydev)
+{
+	int err;
+
+	mutex_lock(&phydev->lock);
+	err = brcm_fet_config_init(phydev);
+	mutex_unlock(&phydev->lock);
+
+	return err;
+}
+
 static struct phy_driver broadcom_drivers[] = {
 {
 	.phy_id		= PHY_ID_BCM5411,
@@ -906,6 +967,8 @@ static struct phy_driver broadcom_drivers[] = {
 	.read_status	= genphy_read_status,
 	.ack_interrupt	= brcm_fet_ack_interrupt,
 	.config_intr	= brcm_fet_config_intr,
+	.suspend	= brcm_fet_suspend,
+	.resume		= brcm_fet_resume,
 }, {
 	.phy_id		= PHY_ID_BCM5241,
 	.phy_id_mask	= 0xfffffff0,
@@ -919,6 +982,8 @@ static struct phy_driver broadcom_drivers[] = {
 	.ack_interrupt	= brcm_fet_ack_interrupt,
 	.config_intr	= brcm_fet_config_intr,
 	.soft_reset	= brcm_fet_config_init,
+	.suspend	= brcm_fet_suspend,
+	.resume		= brcm_fet_resume,
 } };
 
 module_phy_driver(broadcom_drivers);

@@ -8,7 +8,8 @@ LINUX_TOOLS += tmon
 
 TMON_DEPENDENCIES = host-pkgconf ncurses
 TMON_MAKE_OPTS = $(LINUX_MAKE_FLAGS) \
-	CC=$(TARGET_CC)
+	CC=$(TARGET_CC) \
+	LDFLAGS="$(TARGET_LDFLAGS)"
 
 # STB Linux 4.1 and 4.9 use $(PKG_CONFIG) while building tmon.
 TARGET_CONFIGURE_OPTS += PKG_CONFIG="$(HOST_DIR)/bin/pkg-config"

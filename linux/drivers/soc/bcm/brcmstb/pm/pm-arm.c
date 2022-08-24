@@ -567,9 +567,9 @@ static noinline int brcmstb_pm_s3_finish(void)
 	u32 flags;
 
 #ifdef CONFIG_THUMB2_KERNEL
-	reentry = virt_to_phys(&cpu_resume_arm);
+	reentry = __pa_symbol(&cpu_resume_arm);
 #else
-	reentry = virt_to_phys(&cpu_resume);
+	reentry = __pa_symbol(&cpu_resume);
 #endif
 
 	/*

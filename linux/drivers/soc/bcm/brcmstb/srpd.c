@@ -20,6 +20,9 @@
 #include <linux/of_device.h>
 #include <linux/io.h>
 
+#define REG_MEMC_CNTRLR_CONFIG		0x00
+#define  CNTRLR_CONFIG_LPDDR4		5
+#define  CNTRLR_CONFIG_MASK		0xf
 #define REG_MEMC_SRPD_CFG_21		0x20
 #define REG_MEMC_SRPD_CFG_20		0x34
 #define REG_MEMC_SRPD_CFG_1x		0x3c
@@ -38,6 +41,16 @@ struct brcmstb_memc {
 	u32 frequency;
 	u32 srpd_offset;
 };
+
+static int brcmstb_memc_uses_lpddr4(struct brcmstb_memc *memc)
+{
+	void __iomem *config = memc->ddr_ctrl + REG_MEMC_CNTRLR_CONFIG;
+	u32 reg;
+
+	reg = __raw_readl(config) & CNTRLR_CONFIG_MASK;
+
+	return reg == CNTRLR_CONFIG_LPDDR4;
+}
 
 static int brcmstb_memc_srpd_config(struct brcmstb_memc *memc,
 				    unsigned int cycles)
@@ -85,7 +98,7 @@ static ssize_t store_attr_srpd(struct device *dev,
 	unsigned int val;
 	int ret;
 
-	if (memc->srpd_offset == REG_MEMC_SRPD_CFG_21)
+	if (brcmstb_memc_uses_lpddr4(memc))
 		return -EOPNOTSUPP;
 
 	ret = kstrtouint(buf, 10, &val);

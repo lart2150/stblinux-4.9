@@ -51,7 +51,7 @@ static const char * const clk_names_stb[] = {
 
 	/* [40..4f] */
 	"sw_sid", "sw_v3d_cpu", "sw_vec", "sw_xpt_wakeup",
-	"sw_tsio", "reserved", "reserved", "reserved",
+	"sw_tsio", "sw_mbvn", "sw_raaga0_wkup", "reserved",
 	"reserved", "reserved", "reserved", "reserved",
 	"reserved", "reserved", "reserved", "reserved",
 
