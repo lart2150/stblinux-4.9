@@ -137,6 +137,11 @@ ifeq ($(BR2_TOOLCHAIN_EXTERNAL_MUSL),y)
 TOOLCHAIN_EXTERNAL_LIBS += libc.so
 endif
 
+ifeq ($(BR2_TOOLCHAIN_EXTERNAL_LLVM),y)
+TOOLCHAIN_EXTERNAL_LIBS += libc++*.so*
+TOOLCHAIN_EXTERNAL_LIBS += libunwind.so*
+endif
+
 ifeq ($(BR2_INSTALL_LIBSTDCPP),y)
 TOOLCHAIN_EXTERNAL_LIBS += libstdc++.so.*
 endif
@@ -404,6 +409,14 @@ define TOOLCHAIN_EXTERNAL_INSTALL_TARGET_LIBS
 	$(Q)for libpattern in $(TOOLCHAIN_EXTERNAL_LIBS); do \
 		$(call copy_toolchain_lib_root,$$libpattern); \
 	done
+	# We use "ls" to check if there are 32-bit files to copy. Otherwise the
+	# build would abort with an error if there are no files.
+	$(Q)for d in $(BR2_ROOTFS_LIB32_DIR) usr/$(BR2_ROOTFS_LIB32_DIR); do \
+		if ls $${STAGING_DIR}/$${d}/*.so* >/dev/null 2>&1; then \
+			echo "$${STAGING_DIR}/$${d} -> $(TARGET_DIR)/$${d}"; \
+			cp -a $${STAGING_DIR}/$${d}/*.so* $(TARGET_DIR)/$${d}; \
+		fi; \
+	done
 endef
 endif
 
@@ -453,16 +466,40 @@ define TOOLCHAIN_EXTERNAL_INSTALL_SYSROOT_LIBS
 	$(call copy_toolchain_sysroot,$${SYSROOT_DIR},$${ARCH_SYSROOT_DIR},$${ARCH_SUBDIR},$${ARCH_LIB_DIR},$${SUPPORT_LIB_DIR},$(ROOTFS_LIB_DIR)); \
 	if [ "$(BR2_ROOTFS_RUNTIME32)" = "y" ]; then \
 		$(call MESSAGE,"Copying external toolchain 32-bit libraries to staging...") ; \
-		mkdir -p "$${STAGING_DIR}/$(BR2_ROOTFS_LIB32_DIR)" \
-			"$${STAGING_DIR}/usr/$(BR2_ROOTFS_LIB32_DIR)"; \
+		lib32_dir=$(BR2_ROOTFS_LIB32_DIR); \
+		mkdir -p "$${STAGING_DIR}/$${lib32_dir}" \
+			"$${STAGING_DIR}/usr/$${lib32_dir}"; \
 		rsync -a --exclude '*.a' "$(BR2_ROOTFS_RUNTIME32_PATH)/lib/" \
-			"$${STAGING_DIR}/$(BR2_ROOTFS_LIB32_DIR)"; \
-		if [ "$(BR2_ROOTFS_LIB32_DIR)" != "lib" ]; then \
-			ldso_32=`ls $${STAGING_DIR}/$(BR2_ROOTFS_LIB32_DIR)/ld-linux*.so*`; \
+			"$${STAGING_DIR}/$${lib32_dir}"; \
+		if ! file "$(BR2_ROOTFS_RUNTIME32_PATH)/usr/lib/libc.so" 2>/dev/null | grep 'ASCII' >/dev/null; then \
+			echo "Copying 32-bit /usr/lib..."; \
+			rsync -a --exclude '*.[ao]' --exclude '*/' \
+				"$(BR2_ROOTFS_RUNTIME32_PATH)/usr/lib/" \
+				"$${STAGING_DIR}/usr/$${lib32_dir}"; \
+			ldso_32=`ls $${STAGING_DIR}/$${lib32_dir}/ld-*.so*`; \
+			base_ldso_32=`basename "$${ldso_32}"`; \
+			echo "32-bit library loader is $${base_ldso_32}."; \
+			if [ -L "$${ldso_32}" ]; then \
+				ldso_dest=`readlink "$${ldso_32}"`; \
+				ldso_newdest=`echo "$${ldso_dest}" | sed -e "s,/lib/,/$${lib32_dir}/,"`; \
+				echo "$${base_ldso_32} is a symlink to $${ldso_dest}."; \
+				echo "Changing symlink to $${ldso_newdest}."; \
+				echo ln -snf "$${ldso_newdest}" "$${ldso_32}" ; \
+				ln -snf "$${ldso_newdest}" "$${ldso_32}" ; \
+				if [ $(BR2_ROOTFS_LIB_DIR) = "lib" ]; then \
+					ldso_lib64dir="$${STAGING_DIR}/lib/$${base_ldso_32}"; \
+					echo "Creating additional symlink in /lib"; \
+					ln -snf "$${ldso_newdest}" "$${ldso_lib64dir}" ; \
+				fi; \
+			fi; \
+		elif [ "$${lib32_dir}" != "lib" ]; then \
+			ldso_32=`ls $${STAGING_DIR}/$${lib32_dir}/ld-linux*.so*`; \
 			ldso_32=`basename "$${ldso_32}"`; \
 			echo "Creating symlink for $${ldso_32}"; \
-			ln -snf "../$(BR2_ROOTFS_LIB32_DIR)/$${ldso_32}" \
+			ln -snf "../$${lib32_dir}/$${ldso_32}" \
 				"$${STAGING_DIR}/lib/$${ldso_32}"; \
+		else \
+			echo "No need to copy 32-bit /usr/lib..."; \
 		fi; \
 	fi
 endef
