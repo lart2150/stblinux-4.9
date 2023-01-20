@@ -81,6 +81,8 @@
 #define    RGMII_EPHY_CK25_DIS		BIT(4)
 #define    RGMII_EPHY_RESET		BIT(7)
 #define  RGMII_OOB_CNTRL		0x0c
+#define   RGMII_LINK			BIT(4)
+#define   RGMII_OOB_DIS			BIT(5)
 #define   RGMII_MODE_EN			BIT(6)
 #define   RGMII_ID_MODE_DIS		BIT(16)
 

@@ -699,6 +699,13 @@ static void bcmasp_adj_link(struct net_device *dev)
 		intf->eee.eee_active = phy_init_eee(phydev, 0) >= 0;
 		bcmasp_eee_enable_set(intf, intf->eee.eee_active);
 	}
+
+	reg = rgmii_rl(intf, RGMII_OOB_CNTRL);
+	if (phydev->link)
+		reg |= RGMII_LINK;
+	else
+		reg &= ~RGMII_LINK;
+	rgmii_wl(intf, reg, RGMII_OOB_CNTRL);
 out:
 	if (changed)
 		phy_print_status(phydev);
@@ -919,6 +926,7 @@ static void bcmasp_rgmii_mode_en_set(struct bcmasp_intf *intf, bool enable)
 		return;
 
 	reg = rgmii_rl(intf, RGMII_OOB_CNTRL);
+	reg &= ~RGMII_OOB_DIS;
 	if (enable)
 		reg |= RGMII_MODE_EN;
 	else

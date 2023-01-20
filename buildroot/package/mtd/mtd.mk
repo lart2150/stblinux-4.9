@@ -4,7 +4,7 @@
 #
 ################################################################################
 
-MTD_VERSION = 2.1.3
+MTD_VERSION = 2.1.5
 MTD_SOURCE = mtd-utils-$(MTD_VERSION).tar.bz2
 MTD_SITE = ftp://ftp.infradead.org/pub/mtd-utils
 MTD_LICENSE = GPL-2.0
@@ -14,6 +14,14 @@ MTD_CPE_ID_PRODUCT = mtd-utils
 MTD_INSTALL_STAGING = YES
 
 MTD_LDFLAGS = $(TARGET_LDFLAGS)
+
+define MTD_BRCMSTB_PATCHES
+	$(Q)PKGDIR=$(PKGDIR) \
+		SOFTWARE_VERSION=$(MTD_VERSION) \
+		SRCDIR=$(@D) \
+		bin/apply_brcm_patches.sh
+endef
+MTD_PRE_PATCH_HOOKS += MTD_BRCMSTB_PATCHES
 
 ifeq ($(BR2_PACKAGE_LIBEXECINFO),y)
 MTD_DEPENDENCIES += libexecinfo

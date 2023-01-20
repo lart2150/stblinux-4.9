@@ -28,7 +28,7 @@ static const struct of_device_id bcmasp_mdio_of_match[] = {
 	{ .compatible = "brcm,asp-v2.0-mdio", },
 	{ /* sentinel */ },
 };
-MODULE_DEVICE_TABLE(of, bcmasp_of_match);
+MODULE_DEVICE_TABLE(of, bcmasp_mdio_of_match);
 
 static inline void _intr2_mask_clear(struct bcmasp_priv *priv, u32 mask, bool l3)
 {

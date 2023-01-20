@@ -19,7 +19,7 @@
 # - Diff sysusers.d with the previous version
 # - Diff factory/etc/nsswitch.conf with the previous version
 #   (details are often sprinkled around in README and manpages)
-SYSTEMD_VERSION = 250.4
+SYSTEMD_VERSION = 250.8
 SYSTEMD_SITE = $(call github,systemd,systemd-stable,v$(SYSTEMD_VERSION))
 SYSTEMD_LICENSE = \
 	LGPL-2.1+, \
@@ -92,6 +92,11 @@ SYSTEMD_CONF_OPTS += \
 	-Dtests=false \
 	-Dtmpfiles=true \
 	-Dutmp=false
+
+SYSTEMD_CFLAGS = $(TARGET_CFLAGS)
+ifeq ($(BR2_OPTIMIZE_FAST),y)
+SYSTEMD_CFLAGS += -O3
+endif
 
 ifeq ($(BR2_nios2),y)
 # Nios2 ld emits warnings, make warnings not to be treated as errors

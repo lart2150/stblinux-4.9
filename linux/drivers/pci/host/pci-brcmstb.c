@@ -189,7 +189,6 @@
 #define  PCIE_OUTB_ERR_MEM_CAUSE_ACC_DISABLED_MASK	0x2
 #define  PCIE_OUTB_ERR_MEM_CAUSE_BAD_ADDR_MASK		0x1
 
-
 #define BRCM_NUM_PCI_OUT_WINS		0x4
 #define BRCM_MAX_SCB			0x4
 #define MAX_PCIE			0x4
@@ -417,6 +416,7 @@ struct brcm_pcie {
 	bool			has_err_report;
 	struct reset_control	*rescal;
 	struct notifier_block	die_notifier;
+	struct notifier_block	panic_notifier;
 };
 
 struct of_pci_range *dma_ranges;
@@ -1478,9 +1478,8 @@ cleanup:
 /*
  * Dump out pcie errors on die or panic.
  */
-static int dump_pcie_error(struct notifier_block *self, unsigned long v, void *p)
+static int _brcm_pcie_dump_err(const struct brcm_pcie *pcie, const char *type)
 {
-	const struct brcm_pcie *pcie = container_of(self, struct brcm_pcie, die_notifier);
 	void __iomem *base = pcie->base;
 	int i, is_cfg_err, is_mem_err, lanes;
 	char *width_str, *direction_str, lanes_str[9];
@@ -1489,6 +1488,7 @@ static int dump_pcie_error(struct notifier_block *self, unsigned long v, void *p
 	if (bcm_readl(base + PCIE_OUTB_ERR_VALID) == 0)
 		return NOTIFY_DONE;
 	info = bcm_readl(base + PCIE_OUTB_ERR_ACC_INFO);
+	dev_err(pcie->dev, "handling %s error notification\n", type);
 
 	is_cfg_err = !!(info & PCIE_OUTB_ERR_ACC_INFO_CFG_ERR_MASK);
 	is_mem_err = !!(info & PCIE_OUTB_ERR_ACC_INFO_MEM_ERR_MASK);
@@ -1539,18 +1539,39 @@ static int dump_pcie_error(struct notifier_block *self, unsigned long v, void *p
 	return NOTIFY_DONE;
 }
 
+static int brcm_pcie_die_notify_cb(struct notifier_block *self,
+				   unsigned long v, void *p)
+{
+	const struct brcm_pcie *pcie =
+		container_of(self, struct brcm_pcie, die_notifier);
+
+	return _brcm_pcie_dump_err(pcie, "Die");
+}
+
+static int brcm_pcie_panic_notify_cb(struct notifier_block *self,
+				     unsigned long v, void *p)
+{
+	const struct brcm_pcie *pcie =
+		container_of(self, struct brcm_pcie, panic_notifier);
+
+	return _brcm_pcie_dump_err(pcie, "Panic");
+}
+
 static void brcm_register_die_notifiers(struct brcm_pcie *pcie)
 {
-	pcie->die_notifier.notifier_call = dump_pcie_error;
+	pcie->panic_notifier.notifier_call = brcm_pcie_panic_notify_cb;
+	atomic_notifier_chain_register(&panic_notifier_list,
+				       &pcie->panic_notifier);
+
+	pcie->die_notifier.notifier_call = brcm_pcie_die_notify_cb;
 	register_die_notifier(&pcie->die_notifier);
-	atomic_notifier_chain_register(&panic_notifier_list, &pcie->die_notifier);
 }
 
 static void brcm_unregister_die_notifiers(struct brcm_pcie *pcie)
 {
 	unregister_die_notifier(&pcie->die_notifier);
-	atomic_notifier_chain_unregister(&panic_notifier_list, &pcie->die_notifier);
-	pcie->die_notifier.notifier_call = NULL;
+	atomic_notifier_chain_unregister(&panic_notifier_list,
+					 &pcie->panic_notifier);
 }
 
 static void __attribute__((__section__("pci_fixup_early")))

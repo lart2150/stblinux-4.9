@@ -242,7 +242,7 @@ static const struct reserved_mem_ops rmem_cma_ops = {
 	.device_release = rmem_cma_device_release,
 };
 
-static int __init rmem_cma_setup(struct reserved_mem *rmem)
+static int __init __rmem_cma_setup(struct reserved_mem *rmem)
 {
 	phys_addr_t align = PAGE_SIZE << max(MAX_ORDER - 1, pageblock_order);
 	phys_addr_t mask = align - 1;
@@ -250,8 +250,7 @@ static int __init rmem_cma_setup(struct reserved_mem *rmem)
 	struct cma *cma;
 	int err;
 
-	if (!of_get_flat_dt_prop(node, "reusable", NULL) ||
-	    of_get_flat_dt_prop(node, "no-map", NULL))
+	if (of_get_flat_dt_prop(node, "no-map", NULL))
 		return -EINVAL;
 
 	if ((rmem->base & mask) || (rmem->size & mask)) {
@@ -278,5 +277,25 @@ static int __init rmem_cma_setup(struct reserved_mem *rmem)
 
 	return 0;
 }
+
+static int __init rmem_cma_setup(struct reserved_mem *rmem)
+{
+	unsigned long node = rmem->fdt_node;
+
+	if (!of_get_flat_dt_prop(node, "reusable", NULL))
+		return -EINVAL;
+
+	return __rmem_cma_setup(rmem);
+}
+
+static int __init rmem_restricted_dma_setup(struct reserved_mem *rmem)
+{
+	pr_info("Reserved memory: created CMA memory pool out of restricted DMA at %pa, size %ld MiB\n",
+		&rmem->base, (unsigned long)rmem->size / SZ_1M);
+
+	return __rmem_cma_setup(rmem);
+}
+
 RESERVEDMEM_OF_DECLARE(cma, "shared-dma-pool", rmem_cma_setup);
+RESERVEDMEM_OF_DECLARE(restricted_dma, "restricted-dma-pool", rmem_restricted_dma_setup);
 #endif
